@@ -13,6 +13,10 @@ export class TasksController {
   @ApiOperation({ summary: 'List all tasks' })
   findAll() { return this.tasks.findAll(); }
 
+  @Get(':id/progress')
+  @ApiOperation({ summary: 'List task progress events' })
+  findProgress(@Param('id') id: string) { return this.tasks.findProgress(id); }
+
   @Get(':id')
   @ApiOperation({ summary: 'Get a task by ID' })
   findOne(@Param('id') id: string) { return this.tasks.findOne(id); }
@@ -23,7 +27,7 @@ export class TasksController {
 
   @Post(':id/retry')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Retry a task (resets round, log, error)' })
+  @ApiOperation({ summary: 'Retry a task (resets round, log, error, progress)' })
   retry(@Param('id') id: string) { return this.tasks.retry(id); }
 
   @Delete(':id')

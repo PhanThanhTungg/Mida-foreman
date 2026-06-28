@@ -1,4 +1,4 @@
-import type { Task, Workspace, Setting, WorkspaceVerifyResult, AgentType } from '@foreman/types';
+import type { AgentType, Setting, Task, TaskProgressEvent, Workspace, WorkspaceVerifyResult } from '@foreman/types';
 import { API_URL, API_KEY } from './constants';
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -22,6 +22,7 @@ export const apiClient = {
   tasks: {
     list: () => request<Task[]>('/tasks'),
     get: (id: string) => request<Task>(`/tasks/${id}`),
+    progress: (id: string) => request<TaskProgressEvent[]>(`/tasks/${id}/progress`),
     create: (dto: { issueKey: string; title: string; repoId: string; agentType: AgentType; maxRounds?: number }) =>
       request<Task>('/tasks', { method: 'POST', body: JSON.stringify(dto) }),
     retry: (id: string) => request<Task>(`/tasks/${id}/retry`, { method: 'POST' }),

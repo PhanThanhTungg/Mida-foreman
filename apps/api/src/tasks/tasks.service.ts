@@ -1,10 +1,12 @@
 import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import type { Task } from '@prisma/client';
+import type { TaskProgressEvent, TaskProgressPhase, TaskProgressStatus } from '@foreman/types';
 import { PrismaService } from '../prisma/prisma.service';
 import { OrchestratorService } from './orchestrator.service';
 import { ClaudeRunnerService } from '../workers/claude-runner.service';
 import { WorkspaceLockService } from '../workers/repo-lock.service';
 import { CreateTaskDto } from './dto/create-task.dto';
+import { ForemanGateway } from '../gateway/foreman.gateway';
 
 @Injectable()
 export class TasksService {
@@ -15,6 +17,7 @@ export class TasksService {
     private readonly orchestrator: OrchestratorService,
     private readonly runner: ClaudeRunnerService,
     private readonly lock: WorkspaceLockService,
+    private readonly gateway: ForemanGateway,
   ) {}
 
   findAll(): Promise<Task[]> {
@@ -25,6 +28,14 @@ export class TasksService {
     const task = await this.prisma.task.findUnique({ where: { id } });
     if (!task) throw new NotFoundException(`Task ${id} not found`);
     return task;
+  }
+
+  async findProgress(id: string): Promise<TaskProgressEvent[]> {
+    await this.findOne(id);
+    return this.prisma.taskProgressEvent.findMany({
+      where: { taskId: id },
+      orderBy: [{ round: 'asc' }, { createdAt: 'asc' }],
+    });
   }
 
   async create(dto: CreateTaskDto): Promise<Task> {
@@ -38,6 +49,8 @@ export class TasksService {
         status: 'queued',
       },
     });
+    await this.recordProgress(task.id, 0, 'jira_fetch', 'skipped', 'Created manually');
+    await this.recordProgress(task.id, 0, 'queued', 'started', 'Task queued');
     await this.orchestrator.enqueue(task.id);
     this.logger.log(`Task ${task.id} created and enqueued`);
     return task;
@@ -52,6 +65,9 @@ export class TasksService {
     if (result.count === 0) {
       throw new BadRequestException('Cannot retry a running task');
     }
+    await this.prisma.taskProgressEvent.deleteMany({ where: { taskId: id } });
+    await this.recordProgress(id, 0, 'jira_fetch', 'skipped', 'Retry started manually');
+    await this.recordProgress(id, 0, 'queued', 'started', 'Task queued for retry');
     await this.orchestrator.enqueue(id);
     this.logger.log(`Task ${id} retried`);
     return this.findOne(id);
@@ -64,5 +80,19 @@ export class TasksService {
     }
     await this.prisma.task.delete({ where: { id } });
     this.logger.log(`Task ${id} deleted (was ${task.status})`);
+  }
+
+  private async recordProgress(
+    taskId: string,
+    round: number,
+    phase: TaskProgressPhase,
+    status: TaskProgressStatus,
+    message = '',
+  ): Promise<TaskProgressEvent> {
+    const event = await this.prisma.taskProgressEvent.create({
+      data: { taskId, round, phase, status, message },
+    });
+    this.gateway.emitProgress(taskId, event);
+    return event;
   }
 }

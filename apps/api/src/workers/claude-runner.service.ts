@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { spawn } from 'child_process';
 import type { ChildProcess } from 'child_process';
-import type { AgentType, AgentRunResult, RoundContext } from '@foreman/types';
+import type { AgentType, AgentRunResult, RoundContext, TaskProgressCallback, TaskProgressPhase } from '@foreman/types';
 import { AgentsRegistry } from '../agents/agents.registry';
 
 
@@ -56,6 +56,11 @@ interface ClaudeResultEvent {
   duration_ms?: unknown;
 }
 
+interface ClaudePhaseSignal {
+  phase: TaskProgressPhase;
+  message: string;
+}
+
 @Injectable()
 export class ClaudeRunnerService {
   private readonly logger = new Logger(ClaudeRunnerService.name);
@@ -72,10 +77,49 @@ export class ClaudeRunnerService {
     }
   }
 
-  async run(context: RoundContext, agentType: AgentType, onLog?: (line: string) => void): Promise<AgentRunResult> {
+  async run(
+    context: RoundContext,
+    agentType: AgentType,
+    onLog?: (line: string) => void,
+    onProgress?: TaskProgressCallback,
+  ): Promise<AgentRunResult> {
     const config = this.registry.getConfig(agentType);
     const logLines: string[] = [];
     let finalResult: ClaudeResultEvent | null = null;
+    const startedPhases = new Set<TaskProgressPhase>();
+    const completedPhases = new Set<TaskProgressPhase>();
+
+    const emitProgress: TaskProgressCallback = (phase, status, message = '') => {
+      const result = onProgress?.(phase, status, message);
+      if (result instanceof Promise) {
+        result.catch((err: unknown) => this.logger.warn(`Progress callback failed: ${err instanceof Error ? err.message : String(err)}`));
+      }
+    };
+
+    const startPhase = (phase: TaskProgressPhase, message: string) => {
+      if (startedPhases.has(phase)) return;
+      startedPhases.add(phase);
+      emitProgress(phase, 'started', message);
+    };
+
+    const completePhase = (phase: TaskProgressPhase, message: string) => {
+      if (!startedPhases.has(phase) || completedPhases.has(phase)) return;
+      completedPhases.add(phase);
+      emitProgress(phase, 'completed', message);
+    };
+
+    const advancePhase = (phase: TaskProgressPhase, message: string) => {
+      if (phase === 'plan') completePhase('understand', 'Repository context reviewed');
+      if (phase === 'code') {
+        completePhase('understand', 'Repository context reviewed');
+        completePhase('plan', 'Plan formed');
+      }
+      if (phase === 'verify') {
+        completePhase('plan', 'Plan formed');
+        completePhase('code', 'Code changes prepared');
+      }
+      startPhase(phase, message);
+    };
 
     const log = (line: string) => {
       logLines.push(line);
@@ -87,7 +131,10 @@ export class ClaudeRunnerService {
     log(`${A.bold}${A.brightCyan}◆ Round ${context.round}${A.reset}  ${A.dim}${agentType} agent  ·  ${context.issueKey}${A.reset}`);
 
     try {
+      startPhase('preflight', 'Checking Claude Code CLI');
       await this.preflight(log);
+      completePhase('preflight', 'Claude Code CLI ready');
+      startPhase('understand', 'Reading task and repository context');
 
       const claudeResult = await this.runProcess(
         this.claudeCliPath,
@@ -99,6 +146,7 @@ export class ClaudeRunnerService {
           onStdoutLine: (line) => {
             const parsed = this.parseClaudeStreamLine(line);
             if (parsed.resultEvent) finalResult = parsed.resultEvent;
+            for (const signal of parsed.phaseSignals) advancePhase(signal.phase, signal.message);
             for (const logLine of parsed.logLines) log(logLine);
           },
           onStderrLine: (line) => log(`[stderr] ${line}`),
@@ -107,10 +155,12 @@ export class ClaudeRunnerService {
       this.activeProcesses.delete(context.taskId);
 
       if (claudeResult.timedOut) {
+        emitProgress('complete', 'failed', `Claude Code timed out after ${this.claudeTimeoutMs}ms`);
         return this.failure(`Claude Code timed out after ${this.claudeTimeoutMs}ms`, logLines);
       }
 
       if (claudeResult.code !== 0) {
+        emitProgress('complete', 'failed', `Claude Code exited with code ${claudeResult.code ?? 'unknown'}`);
         return this.failure(
           `Claude Code exited with code ${claudeResult.code ?? 'unknown'}${claudeResult.stderr ? `: ${claudeResult.stderr}` : ''}`,
           logLines,
@@ -120,16 +170,18 @@ export class ClaudeRunnerService {
       const resultEvent = finalResult as ClaudeResultEvent | null;
       if (resultEvent?.is_error === true) {
         const message = typeof resultEvent.result === 'string' ? resultEvent.result : 'Claude Code reported an error';
+        emitProgress('complete', 'failed', message);
         return this.failure(message, logLines);
       }
 
       log(`${A.dim}Checking repository changes…${A.reset}`);
-      const mrUrl = await this.createPullRequestFromChanges(context, log);
+      const mrUrl = await this.createPullRequestFromChanges(context, log, emitProgress);
 
       return { success: true, mrUrl, error: null, log: logLines.join('\n') };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       log(`${A.brightRed}✗ Runner error: ${message}${A.reset}`);
+      emitProgress('complete', 'failed', message);
       return this.failure(message, logLines);
     }
   }
@@ -197,14 +249,22 @@ export class ClaudeRunnerService {
     return lines.join('\n');
   }
 
-  private async createPullRequestFromChanges(context: RoundContext, log: (line: string) => void): Promise<string> {
+  private async createPullRequestFromChanges(
+    context: RoundContext,
+    log: (line: string) => void,
+    onProgress?: TaskProgressCallback,
+  ): Promise<string> {
+    onProgress?.('verify', 'started', 'Checking repository changes');
     const status = await this.runGit(['status', '--porcelain'], context.repoPath);
     if (!status.stdout.trim()) {
+      onProgress?.('verify', 'failed', 'No changes produced');
       throw new Error('No changes produced');
     }
+    onProgress?.('verify', 'completed', 'Repository changes detected');
 
     const branch = this.buildBranchName(context);
     const commitMessage = this.buildCommitMessage(context);
+    onProgress?.('pr', 'started', 'Creating branch, commit, push, and pull request');
 
     log(`${A.dim}  Creating branch ${A.reset}${A.brightYellow}${branch}${A.reset}`);
     await this.runGit(['checkout', '-B', branch], context.repoPath);
@@ -227,9 +287,13 @@ export class ClaudeRunnerService {
 
     if (!ghResult.timedOut && ghResult.code === 0) {
       const prUrl = this.extractGitHubUrl(ghResult.stdout);
-      if (prUrl) return prUrl;
+      if (prUrl) {
+        onProgress?.('pr', 'completed', 'Pull request created');
+        return prUrl;
+      }
     }
 
+    onProgress?.('pr', 'failed', 'GitHub CLI could not create pull request');
     throw new Error(`gh pr create failed: ${ghResult.stderr || ghResult.stdout || 'no output'}`);
   }
 
@@ -326,16 +390,56 @@ export class ClaudeRunnerService {
     });
   }
 
-  private parseClaudeStreamLine(line: string): { logLines: string[]; resultEvent: ClaudeResultEvent | null } {
+  private parseClaudeStreamLine(line: string): { logLines: string[]; resultEvent: ClaudeResultEvent | null; phaseSignals: ClaudePhaseSignal[] } {
     try {
       const parsed = JSON.parse(line) as ClaudeResultEvent & Record<string, unknown>;
       return {
         logLines: this.formatClaudeEvent(parsed),
         resultEvent: parsed.type === 'result' ? parsed : null,
+        phaseSignals: this.extractProgressSignals(parsed),
       };
     } catch {
-      return { logLines: [line], resultEvent: null };
+      return { logLines: [line], resultEvent: null, phaseSignals: [] };
     }
+  }
+
+  private extractProgressSignals(event: Record<string, unknown>): ClaudePhaseSignal[] {
+    if (event.type !== 'assistant') return [];
+    const msg = event.message as Record<string, unknown> | null;
+    if (!msg || !Array.isArray(msg.content)) return [];
+
+    const signals: ClaudePhaseSignal[] = [];
+    for (const block of msg.content as Array<Record<string, unknown>>) {
+      if (block.type === 'text' && typeof block.text === 'string' && block.text.trim()) {
+        signals.push({ phase: 'plan', message: 'Planning implementation' });
+      } else if (block.type === 'tool_use') {
+        const signal = this.classifyToolUse(block);
+        if (signal) signals.push(signal);
+      }
+    }
+    return signals;
+  }
+
+  private classifyToolUse(block: Record<string, unknown>): ClaudePhaseSignal | null {
+    const name = typeof block.name === 'string' ? block.name : '';
+    const input = (block.input as Record<string, unknown>) ?? {};
+
+    if (['Read', 'Grep', 'Glob', 'LS'].includes(name)) {
+      return { phase: 'understand', message: `${name} repository context` };
+    }
+
+    if (['Write', 'Edit', 'MultiEdit'].includes(name)) {
+      return { phase: 'code', message: `${name} code changes` };
+    }
+
+    if (name === 'Bash') {
+      const command = typeof input.command === 'string' ? input.command : '';
+      if (/\b(test|lint|build|tsc|typecheck|jest|vitest|pytest)\b/i.test(command)) {
+        return { phase: 'verify', message: 'Running verification command' };
+      }
+    }
+
+    return null;
   }
 
   private formatClaudeEvent(event: Record<string, unknown>): string[] {

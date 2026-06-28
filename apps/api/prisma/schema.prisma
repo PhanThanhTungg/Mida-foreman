@@ -22,24 +22,58 @@ enum AgentType {
   improve
 }
 
+enum TaskProgressPhase {
+  jira_fetch
+  queued
+  preflight
+  understand
+  plan
+  code
+  verify
+  pr
+  complete
+}
+
+enum TaskProgressStatus {
+  started
+  completed
+  failed
+  skipped
+  looped
+}
+
 model Task {
-  id        String     @id @default(cuid())
-  issueKey  String
-  title     String
-  repo      Repo       @relation(fields: [repoId], references: [id])
-  repoId    String
-  agentType AgentType
-  status    TaskStatus @default(queued)
-  round     Int        @default(0)
-  maxRounds Int        @default(5)
-  log       String     @default("")
-  mrUrl     String?
-  error     String?
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
+  id             String              @id @default(cuid())
+  issueKey       String
+  title          String
+  repo           Repo                @relation(fields: [repoId], references: [id])
+  repoId         String
+  agentType      AgentType
+  status         TaskStatus          @default(queued)
+  round          Int                 @default(0)
+  maxRounds      Int                 @default(5)
+  log            String              @default("")
+  mrUrl          String?
+  error          String?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  progressEvents TaskProgressEvent[]
 
   @@index([status])
   @@index([repoId])
+}
+
+model TaskProgressEvent {
+  id        String             @id @default(cuid())
+  task      Task               @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  taskId    String
+  round     Int                @default(0)
+  phase     TaskProgressPhase
+  status    TaskProgressStatus
+  message   String             @default("")
+  createdAt DateTime           @default(now())
+
+  @@index([taskId, round, createdAt])
 }
 
 model Repo {

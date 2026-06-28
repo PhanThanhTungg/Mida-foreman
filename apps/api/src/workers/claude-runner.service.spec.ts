@@ -111,16 +111,22 @@ describe('ClaudeRunnerService', () => {
     queueProcess({ stdout: 'https://github.com/org/my-app/pull/1\n', code: 0 });
 
     const onLog = jest.fn();
-    const result = await service.run(context, 'bugfix', onLog);
+    const onProgress = jest.fn();
+    const result = await service.run(context, 'bugfix', onLog, onProgress);
 
     expect(result.success).toBe(true);
     expect(result.mrUrl).toBe('https://github.com/org/my-app/pull/1');
-    expect(onLog).toHaveBeenCalledWith('Claude: Working on it');
+    expect(onLog.mock.calls.some(([line]) => String(line).includes('Working on it'))).toBe(true);
     expect(onLog).toHaveBeenCalledWith('[stderr] minor warning');
+    expect(onProgress).toHaveBeenCalledWith('preflight', 'started', 'Checking Claude Code CLI');
+    expect(onProgress).toHaveBeenCalledWith('preflight', 'completed', 'Claude Code CLI ready');
+    expect(onProgress).toHaveBeenCalledWith('plan', 'started', 'Planning implementation');
+    expect(onProgress).toHaveBeenCalledWith('verify', 'completed', 'Repository changes detected');
+    expect(onProgress).toHaveBeenCalledWith('pr', 'completed', 'Pull request created');
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('falls back to GitHub API token when GitHub CLI cannot create the PR', async () => {
+  it('fails when GitHub CLI cannot create the PR', async () => {
     queueProcess({ stdout: '2.1.195 (Claude Code)\n', code: 0 });
     queueProcess({ stdout: '{"loggedIn":true}\n', code: 0 });
     queueProcess({ stdout: JSON.stringify({ type: 'result', is_error: false }) + '\n', code: 0 });
@@ -133,15 +139,9 @@ describe('ClaudeRunnerService', () => {
 
     const result = await service.run(context, 'bugfix');
 
-    expect(result.success).toBe(true);
-    expect(result.mrUrl).toBe('https://github.com/org/my-app/pull/1');
-    expect(fetchMock).toHaveBeenCalledWith(
-      'https://api.github.com/repos/org/my-app/pulls',
-      expect.objectContaining({
-        method: 'POST',
-        body: expect.stringContaining('"head":"foreman/mah-42-taskabc"'),
-      }),
-    );
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('gh pr create failed');
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it('fails when Claude exits non-zero', async () => {
@@ -167,7 +167,7 @@ describe('ClaudeRunnerService', () => {
     expect(result.error).toBe('No changes produced');
   });
 
-  it('returns a compare URL when GitHub CLI and github_token are unavailable', async () => {
+  it('fails when GitHub CLI is unavailable', async () => {
     settings.getRaw.mockResolvedValueOnce(null);
     queueProcess({ stdout: '2.1.195 (Claude Code)\n', code: 0 });
     queueProcess({ stdout: '{"loggedIn":true}\n', code: 0 });
@@ -181,8 +181,8 @@ describe('ClaudeRunnerService', () => {
 
     const result = await service.run(context, 'bugfix');
 
-    expect(result.success).toBe(true);
-    expect(result.mrUrl).toBe('https://github.com/org/my-app/compare/main...foreman%2Fmah-42-taskabc?expand=1');
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('gh pr create failed');
     expect(fetchMock).not.toHaveBeenCalled();
   });
 

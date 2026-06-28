@@ -16,6 +16,10 @@ for (const line of readFileSync(envPath, 'utf8').split(/\r?\n/)) {
   }
 
   const key = trimmed.slice(0, separatorIndex).trim();
+  if (key === 'NODE_ENV') {
+    continue;
+  }
+
   let value = trimmed.slice(separatorIndex + 1).trim();
   if (
     (value.startsWith('"') && value.endsWith('"')) ||

@@ -34,4 +34,22 @@ describe('ForemanGateway', () => {
       round: 2,
     });
   });
+
+  it('emitProgress sends progress message to all clients', () => {
+    const event = {
+      id: 'progress-1',
+      taskId: 'task-1',
+      round: 1,
+      phase: 'plan' as const,
+      status: 'started' as const,
+      message: 'Planning implementation',
+      createdAt: new Date(),
+    };
+    gateway.emitProgress('task-1', event);
+    expect(mockServer.emit).toHaveBeenCalledWith('message', {
+      type: 'progress',
+      taskId: 'task-1',
+      event,
+    });
+  });
 });

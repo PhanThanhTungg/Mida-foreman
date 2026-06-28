@@ -5,7 +5,7 @@ import { useTasks } from '@/hooks/use-tasks';
 import { useWorkspaces } from '@/hooks/use-workspaces';
 import { TaskForm } from '@/components/tasks/task-form';
 import { TaskList } from '@/components/tasks/task-list';
-import { LogViewer } from '@/components/tasks/log-viewer';
+import { TaskDetailTabs } from '@/components/tasks/task-detail-tabs';
 import { apiClient } from '@/lib/api-client';
 import {
   AlertDialog,
@@ -78,7 +78,7 @@ export function TasksClient({ initialTasks, initialWorkspaces }: Props) {
           />
         </div>
         <div className="flex-1 min-h-0">
-          <LogViewer taskId={selectedId} initialLog={selectedTask?.log ?? ''} />
+          <TaskDetailTabs task={selectedTask ?? null} />
         </div>
       </div>
 

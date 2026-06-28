@@ -1,10 +1,11 @@
 // foreman/apps/api/src/triggers/jira-poller.service.ts
 import { Injectable, Logger, OnApplicationBootstrap, OnApplicationShutdown } from '@nestjs/common';
-import type { AgentType } from '@foreman/types';
+import type { AgentType, TaskProgressEvent, TaskProgressPhase, TaskProgressStatus } from '@foreman/types';
 import { PrismaService } from '../prisma/prisma.service';
 import { SettingsService } from '../settings/settings.service';
 import { WorkspacesService } from '../repos/repos.service';
 import { OrchestratorService } from '../tasks/orchestrator.service';
+import { ForemanGateway } from '../gateway/foreman.gateway';
 
 const DEFAULT_POLL_INTERVAL_MS = 60_000;
 
@@ -27,6 +28,7 @@ export class JiraPollerService implements OnApplicationBootstrap, OnApplicationS
     private readonly settings: SettingsService,
     private readonly repos: WorkspacesService,
     private readonly orchestrator: OrchestratorService,
+    private readonly gateway: ForemanGateway,
   ) {}
 
   async onApplicationBootstrap(): Promise<void> {
@@ -131,8 +133,24 @@ export class JiraPollerService implements OnApplicationBootstrap, OnApplicationS
       },
     });
 
+    await this.recordProgress(task.id, 0, 'jira_fetch', 'completed', `Fetched ${issue.key} from Jira`);
+    await this.recordProgress(task.id, 0, 'queued', 'started', 'Task queued from Jira');
     await this.orchestrator.enqueue(task.id);
     this.processedKeys.add(issue.key);
     this.logger.log(`Enqueued ${issue.key} as ${agentType} task for workspace ${workspaceName}`);
+  }
+
+  private async recordProgress(
+    taskId: string,
+    round: number,
+    phase: TaskProgressPhase,
+    status: TaskProgressStatus,
+    message = '',
+  ): Promise<TaskProgressEvent> {
+    const event = await this.prisma.taskProgressEvent.create({
+      data: { taskId, round, phase, status, message },
+    });
+    this.gateway.emitProgress(taskId, event);
+    return event;
   }
 }

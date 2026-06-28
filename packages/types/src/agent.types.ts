@@ -1,4 +1,4 @@
-import type { AgentType } from './task.types';
+import type { AgentType, TaskProgressPhase, TaskProgressStatus } from './task.types';
 
 export type ToolName =
   | 'read_file'
@@ -31,3 +31,9 @@ export interface RoundContext {
   round: number;
   previousError: string | null;
 }
+
+export type TaskProgressCallback = (
+  phase: TaskProgressPhase,
+  status: TaskProgressStatus,
+  message?: string,
+) => void | Promise<void>;

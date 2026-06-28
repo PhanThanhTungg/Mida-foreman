@@ -20,6 +20,10 @@ const mockPrisma = {
     update: jest.fn().mockResolvedValue(fakeWorkspace),
     delete: jest.fn().mockResolvedValue(fakeWorkspace),
   },
+  task: {
+    deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+  },
+  $transaction: jest.fn().mockImplementation(async (operations: unknown[]) => Promise.all(operations)),
 };
 
 describe('WorkspacesService', () => {
@@ -58,6 +62,7 @@ describe('WorkspacesService', () => {
 
   it('remove deletes workspace', async () => {
     await service.remove('ws-1');
+    expect(mockPrisma.task.deleteMany).toHaveBeenCalledWith({ where: { repoId: 'ws-1' } });
     expect(mockPrisma.repo.delete).toHaveBeenCalledWith({ where: { id: 'ws-1' } });
   });
 });
