@@ -77,7 +77,7 @@ export class ClaudeRunnerService {
     private readonly tools: ToolExecutorService,
   ) {}
 
-  async run(context: RoundContext, agentType: AgentType): Promise<AgentRunResult> {
+  async run(context: RoundContext, agentType: AgentType, onLog?: (line: string) => void): Promise<AgentRunResult> {
     const config = this.registry.getConfig(agentType);
     const logLines: string[] = [];
     let mrUrl: string | null = null;
@@ -91,6 +91,7 @@ export class ClaudeRunnerService {
     const log = (line: string) => {
       logLines.push(line);
       this.logger.log(`[Task ${context.taskId}] ${line}`);
+      onLog?.(line);
     };
 
     log(`=== Round ${context.round} start — ${agentType} agent ===`);

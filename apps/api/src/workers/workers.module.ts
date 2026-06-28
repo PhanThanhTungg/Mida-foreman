@@ -9,6 +9,7 @@ import { SuccessObserverService } from './success-observer.service';
 import { ReposModule } from '../repos/repos.module';
 import { SettingsModule } from '../settings/settings.module';
 import { AgentsModule } from '../agents/agents.module';
+import { GatewayModule } from '../gateway/gateway.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { AgentsModule } from '../agents/agents.module';
     ReposModule,
     SettingsModule,
     AgentsModule,
+    GatewayModule,
   ],
   providers: [
     {

@@ -8,6 +8,7 @@ import { ClaudeRunnerService } from './claude-runner.service';
 import { RepoLockService } from './repo-lock.service';
 import { SuccessObserverService } from './success-observer.service';
 import { AgentsRegistry } from '../agents/agents.registry';
+import { ForemanGateway } from '../gateway/foreman.gateway';
 
 const REQUEUE_DELAY_MS = 60_000;
 
@@ -23,6 +24,7 @@ export class TaskProcessor {
     private readonly lock: RepoLockService,
     private readonly observer: SuccessObserverService,
     private readonly registry: AgentsRegistry,
+    private readonly gateway: ForemanGateway,
   ) {}
 
   @Process('process-task')
@@ -48,6 +50,7 @@ export class TaskProcessor {
         where: { id: taskId },
         data: { status: 'running', round: nextRound },
       });
+      this.gateway.emitStatus(taskId, 'running', nextRound);
 
       const config = this.registry.getConfig(task.agentType as AgentType);
       const result = await this.runner.run(
@@ -60,6 +63,7 @@ export class TaskProcessor {
           previousError: task.error,
         },
         task.agentType as AgentType,
+        (line) => this.gateway.emitLog(taskId, line),
       );
 
       const succeeded = await this.observer.check(config.successConditions, result);
@@ -73,18 +77,21 @@ export class TaskProcessor {
           where: { id: taskId },
           data: { status: 'done', mrUrl: result.mrUrl, error: null, log: appendedLog },
         });
+        this.gateway.emitStatus(taskId, 'done', nextRound);
         this.logger.log(`Task ${taskId} completed successfully`);
       } else if (nextRound >= task.maxRounds) {
         await this.prisma.task.update({
           where: { id: taskId },
           data: { status: 'failed', error: result.error, log: appendedLog },
         });
+        this.gateway.emitStatus(taskId, 'failed', nextRound);
         this.logger.warn(`Task ${taskId} failed after ${nextRound} rounds`);
       } else {
         await this.prisma.task.update({
           where: { id: taskId },
           data: { status: 'queued', error: result.error, log: appendedLog },
         });
+        this.gateway.emitStatus(taskId, 'queued', nextRound);
         await this.queue.add('process-task', { taskId }, { attempts: 1 });
         this.logger.log(`Task ${taskId} round ${nextRound} failed — scheduling round ${nextRound + 1}`);
       }

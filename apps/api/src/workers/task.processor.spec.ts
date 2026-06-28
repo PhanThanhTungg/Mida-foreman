@@ -7,6 +7,7 @@ import { SuccessObserverService } from './success-observer.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { ReposService } from '../repos/repos.service';
 import { AgentsRegistry } from '../agents/agents.registry';
+import { ForemanGateway } from '../gateway/foreman.gateway';
 
 const taskId = 'task-abc';
 const repoId = 'repo-1';
@@ -25,6 +26,7 @@ const mockObserver = { check: jest.fn().mockResolvedValue(true) };
 const mockRepos = { findOne: jest.fn().mockResolvedValue(fakeRepo) };
 const mockQueue = { add: jest.fn() };
 const mockRegistry = { getConfig: jest.fn().mockReturnValue({ successConditions: ['mr_created'] }) };
+const mockGateway = { emitLog: jest.fn(), emitStatus: jest.fn() };
 
 describe('TaskProcessor', () => {
   let processor: TaskProcessor;
@@ -39,6 +41,7 @@ describe('TaskProcessor', () => {
         { provide: SuccessObserverService, useValue: mockObserver },
         { provide: ReposService, useValue: mockRepos },
         { provide: AgentsRegistry, useValue: mockRegistry },
+        { provide: ForemanGateway, useValue: mockGateway },
         { provide: getQueueToken('foreman-tasks'), useValue: mockQueue },
       ],
     }).compile();
