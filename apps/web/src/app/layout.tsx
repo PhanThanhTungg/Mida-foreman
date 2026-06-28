@@ -11,7 +11,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className="dark">
       <body className="min-h-screen bg-black text-slate-100">
-        <header className="h-[46px] border-b border-[#20262e] bg-[#10151c] px-3 sm:px-5">
+        <header className="h-[46px] border-b border-[#141a22] bg-black px-3 sm:px-5">
           <div className="flex h-full items-center justify-between">
             <div className="flex min-w-0 items-center gap-3 sm:gap-6">
               <div className="flex items-center gap-3">
