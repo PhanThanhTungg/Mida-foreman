@@ -46,7 +46,7 @@ model Repo {
   id          String   @id @default(cuid())
   name        String   @unique
   path        String
-  githubRepo  String
+  githubRepo  String?
   description String   @default("")
   active      Boolean  @default(true)
   createdAt   DateTime @default(now())

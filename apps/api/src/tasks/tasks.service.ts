@@ -2,6 +2,8 @@ import { Injectable, NotFoundException, BadRequestException, Logger } from '@nes
 import type { Task } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { OrchestratorService } from './orchestrator.service';
+import { ClaudeRunnerService } from '../workers/claude-runner.service';
+import { WorkspaceLockService } from '../workers/repo-lock.service';
 import { CreateTaskDto } from './dto/create-task.dto';
 
 @Injectable()
@@ -11,6 +13,8 @@ export class TasksService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly orchestrator: OrchestratorService,
+    private readonly runner: ClaudeRunnerService,
+    private readonly lock: WorkspaceLockService,
   ) {}
 
   findAll(): Promise<Task[]> {
@@ -39,11 +43,26 @@ export class TasksService {
     return task;
   }
 
+  async retry(id: string): Promise<Task> {
+    await this.findOne(id);
+    const result = await this.prisma.task.updateMany({
+      where: { id, status: { not: 'running' } },
+      data: { status: 'queued', round: 0, log: '', error: null, mrUrl: null },
+    });
+    if (result.count === 0) {
+      throw new BadRequestException('Cannot retry a running task');
+    }
+    await this.orchestrator.enqueue(id);
+    this.logger.log(`Task ${id} retried`);
+    return this.findOne(id);
+  }
+
   async remove(id: string): Promise<void> {
     const task = await this.findOne(id);
-    if (task.status !== 'queued') {
-      throw new BadRequestException('Cannot delete a running or completed task');
+    if (task.status === 'running') {
+      this.runner.kill(id);
     }
     await this.prisma.task.delete({ where: { id } });
+    this.logger.log(`Task ${id} deleted (was ${task.status})`);
   }
 }

@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Delete, Param, Body, HttpCode } from '@nestjs/common';
+import { Controller, Get, Post, Delete, Param, Body, HttpCode, HttpStatus } from '@nestjs/common';
 import { ApiTags, ApiSecurity, ApiOperation } from '@nestjs/swagger';
 import { TasksService } from './tasks.service';
 import { CreateTaskDto } from './dto/create-task.dto';
@@ -20,6 +20,11 @@ export class TasksController {
   @Post()
   @ApiOperation({ summary: 'Create and enqueue a task' })
   create(@Body() dto: CreateTaskDto) { return this.tasks.create(dto); }
+
+  @Post(':id/retry')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Retry a task (resets round, log, error)' })
+  retry(@Param('id') id: string) { return this.tasks.retry(id); }
 
   @Delete(':id')
   @HttpCode(204)

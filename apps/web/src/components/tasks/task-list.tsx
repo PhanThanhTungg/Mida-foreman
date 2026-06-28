@@ -2,6 +2,7 @@
 import type { Task, TaskStatus, AgentType } from '@foreman/types';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
 const STATUS_COLORS: Record<TaskStatus, string> = {
@@ -18,9 +19,9 @@ const AGENT_COLORS: Record<AgentType, string> = {
   improve: 'bg-amber-700 text-white',
 };
 
-interface Props { tasks: Task[]; selectedId: string | null; onSelect: (id: string) => void; }
+interface Props { tasks: Task[]; selectedId: string | null; onSelect: (id: string) => void; onRetry: (id: string) => void; retryingId: string | null; onDelete: (id: string) => void; deletingId: string | null; }
 
-export function TaskList({ tasks, selectedId, onSelect }: Props) {
+export function TaskList({ tasks, selectedId, onSelect, onRetry, retryingId, onDelete, deletingId }: Props) {
   if (tasks.length === 0) return <p className="text-sm text-slate-500 p-4">No tasks yet.</p>;
   return (
     <Table>
@@ -31,6 +32,7 @@ export function TaskList({ tasks, selectedId, onSelect }: Props) {
           <TableHead className="text-slate-400 text-xs">Agent</TableHead>
           <TableHead className="text-slate-400 text-xs">Status</TableHead>
           <TableHead className="text-slate-400 text-xs">Round</TableHead>
+          <TableHead className="text-slate-400 text-xs"></TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -45,6 +47,28 @@ export function TaskList({ tasks, selectedId, onSelect }: Props) {
             <TableCell><Badge className={cn('text-xs', AGENT_COLORS[t.agentType as AgentType])}>{t.agentType}</Badge></TableCell>
             <TableCell><Badge className={cn('text-xs', STATUS_COLORS[t.status as TaskStatus])}>{t.status}</Badge></TableCell>
             <TableCell className="text-xs text-slate-400">{t.round}/{t.maxRounds}</TableCell>
+            <TableCell>
+              <div className="flex gap-1">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={t.status === 'running' || t.status === 'queued' || retryingId === t.id}
+                  onClick={(e) => { e.stopPropagation(); onRetry(t.id); }}
+                  className="text-xs h-6 px-2 border-slate-700 hover:bg-slate-800"
+                >
+                  Retry
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={deletingId === t.id}
+                  onClick={(e) => { e.stopPropagation(); onDelete(t.id); }}
+                  className="text-xs h-6 px-2 border-red-900 text-red-400 hover:bg-red-950 hover:text-red-300"
+                >
+                  {deletingId === t.id ? '...' : 'Delete'}
+                </Button>
+              </div>
+            </TableCell>
           </TableRow>
         ))}
       </TableBody>

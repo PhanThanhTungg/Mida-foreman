@@ -1,17 +1,17 @@
 'use client';
 import { useState } from 'react';
-import type { Repo, AgentType } from '@foreman/types';
+import type { Workspace, AgentType } from '@foreman/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { apiClient } from '@/lib/api-client';
 
-interface Props { repos: Repo[]; onCreated: () => void; }
+interface Props { workspaces: Workspace[]; onCreated: () => void; }
 
 const AGENT_TYPES: AgentType[] = ['feature', 'bugfix', 'support', 'improve'];
 
-export function TaskForm({ repos, onCreated }: Props) {
+export function TaskForm({ workspaces, onCreated }: Props) {
   const [issueKey, setIssueKey] = useState('');
   const [title, setTitle] = useState('');
   const [repoId, setRepoId] = useState('');
@@ -47,10 +47,10 @@ export function TaskForm({ repos, onCreated }: Props) {
         <Input id="title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Fix login redirect" className="h-8 text-sm bg-slate-900 border-slate-700" />
       </div>
       <div className="space-y-1">
-        <Label className="text-xs text-slate-400">Repo</Label>
+        <Label className="text-xs text-slate-400">Workspace</Label>
         <Select value={repoId} onValueChange={setRepoId}>
-          <SelectTrigger className="h-8 text-sm bg-slate-900 border-slate-700"><SelectValue placeholder="Select repo" /></SelectTrigger>
-          <SelectContent>{repos.map((r) => <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>)}</SelectContent>
+          <SelectTrigger className="h-8 text-sm bg-slate-900 border-slate-700"><SelectValue placeholder="Select workspace" /></SelectTrigger>
+          <SelectContent>{workspaces.map((w) => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}</SelectContent>
         </Select>
       </div>
       <div className="space-y-1">

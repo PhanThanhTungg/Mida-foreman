@@ -2,17 +2,17 @@ import { Test } from '@nestjs/testing';
 import { getQueueToken } from '@nestjs/bull';
 import { TaskProcessor } from './task.processor';
 import { ClaudeRunnerService } from './claude-runner.service';
-import { RepoLockService } from './repo-lock.service';
+import { WorkspaceLockService } from './repo-lock.service';
 import { SuccessObserverService } from './success-observer.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { ReposService } from '../repos/repos.service';
+import { WorkspacesService } from '../repos/repos.service';
 import { AgentsRegistry } from '../agents/agents.registry';
 import { ForemanGateway } from '../gateway/foreman.gateway';
 
 const taskId = 'task-abc';
-const repoId = 'repo-1';
+const repoId = 'ws-1';
 const fakeTask = { id: taskId, issueKey: 'MAH-1', title: 'Fix X', repoId, agentType: 'bugfix', status: 'queued', round: 0, maxRounds: 2, log: '', mrUrl: null, error: null };
-const fakeRepo = { id: repoId, path: '/repos/my-app', githubRepo: 'org/my-app', name: 'my-app', active: true };
+const fakeWorkspace = { id: repoId, path: '/home/user/projects', name: 'my-projects', active: true };
 
 const mockPrisma = {
   task: {
@@ -23,7 +23,7 @@ const mockPrisma = {
 const mockRunner = { run: jest.fn() };
 const mockLock = { acquire: jest.fn().mockResolvedValue(true), release: jest.fn() };
 const mockObserver = { check: jest.fn().mockResolvedValue(true) };
-const mockRepos = { findOne: jest.fn().mockResolvedValue(fakeRepo) };
+const mockWorkspaces = { findOne: jest.fn().mockResolvedValue(fakeWorkspace) };
 const mockQueue = { add: jest.fn() };
 const mockRegistry = { getConfig: jest.fn().mockReturnValue({ successConditions: ['mr_created'] }) };
 const mockGateway = { emitLog: jest.fn(), emitStatus: jest.fn() };
@@ -37,9 +37,9 @@ describe('TaskProcessor', () => {
         TaskProcessor,
         { provide: PrismaService, useValue: mockPrisma },
         { provide: ClaudeRunnerService, useValue: mockRunner },
-        { provide: RepoLockService, useValue: mockLock },
+        { provide: WorkspaceLockService, useValue: mockLock },
         { provide: SuccessObserverService, useValue: mockObserver },
-        { provide: ReposService, useValue: mockRepos },
+        { provide: WorkspacesService, useValue: mockWorkspaces },
         { provide: AgentsRegistry, useValue: mockRegistry },
         { provide: ForemanGateway, useValue: mockGateway },
         { provide: getQueueToken('foreman-tasks'), useValue: mockQueue },

@@ -1,15 +1,13 @@
-export interface Repo {
+export interface Workspace {
   id: string;
   name: string;
   path: string;
-  githubRepo: string;
   description: string;
   active: boolean;
   createdAt: Date;
 }
 
-export interface RepoVerifyResult {
+export interface WorkspaceVerifyResult {
   pathExists: boolean;
-  isGitRepo: boolean;
-  canGitStatus: boolean;
+  subRepoCount: number;
 }

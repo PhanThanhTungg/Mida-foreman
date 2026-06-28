@@ -1,4 +1,4 @@
-import type { Task, Repo, Setting, RepoVerifyResult, AgentType } from '@foreman/types';
+import type { Task, Workspace, Setting, WorkspaceVerifyResult, AgentType } from '@foreman/types';
 import { API_URL, API_KEY } from './constants';
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -24,16 +24,17 @@ export const apiClient = {
     get: (id: string) => request<Task>(`/tasks/${id}`),
     create: (dto: { issueKey: string; title: string; repoId: string; agentType: AgentType; maxRounds?: number }) =>
       request<Task>('/tasks', { method: 'POST', body: JSON.stringify(dto) }),
+    retry: (id: string) => request<Task>(`/tasks/${id}/retry`, { method: 'POST' }),
     delete: (id: string) => request<void>(`/tasks/${id}`, { method: 'DELETE' }),
   },
-  repos: {
-    list: () => request<Repo[]>('/repos'),
-    create: (dto: { name: string; path: string; githubRepo: string; description?: string }) =>
-      request<Repo>('/repos', { method: 'POST', body: JSON.stringify(dto) }),
-    update: (id: string, dto: Partial<{ name: string; path: string; githubRepo: string; description: string; active: boolean }>) =>
-      request<Repo>(`/repos/${id}`, { method: 'PUT', body: JSON.stringify(dto) }),
-    delete: (id: string) => request<void>(`/repos/${id}`, { method: 'DELETE' }),
-    verify: (id: string) => request<RepoVerifyResult>(`/repos/${id}/verify`, { method: 'POST' }),
+  workspaces: {
+    list: () => request<Workspace[]>('/workspaces'),
+    create: (dto: { name: string; path: string; description?: string }) =>
+      request<Workspace>('/workspaces', { method: 'POST', body: JSON.stringify(dto) }),
+    update: (id: string, dto: Partial<{ name: string; path: string; description: string; active: boolean }>) =>
+      request<Workspace>(`/workspaces/${id}`, { method: 'PUT', body: JSON.stringify(dto) }),
+    delete: (id: string) => request<void>(`/workspaces/${id}`, { method: 'DELETE' }),
+    verify: (id: string) => request<WorkspaceVerifyResult>(`/workspaces/${id}/verify`, { method: 'POST' }),
   },
   settings: {
     list: () => request<Setting[]>('/settings'),

@@ -2,11 +2,11 @@
 import { Module } from '@nestjs/common';
 import { JiraPollerService } from './jira-poller.service';
 import { SettingsModule } from '../settings/settings.module';
-import { ReposModule } from '../repos/repos.module';
+import { WorkspacesModule } from '../repos/repos.module';
 import { TasksModule } from '../tasks/tasks.module';
 
 @Module({
-  imports: [SettingsModule, ReposModule, TasksModule],
+  imports: [SettingsModule, WorkspacesModule, TasksModule],
   providers: [JiraPollerService],
 })
 export class TriggersModule {}

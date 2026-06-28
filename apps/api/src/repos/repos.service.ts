@@ -1,15 +1,14 @@
 import { Injectable, NotFoundException, Logger } from '@nestjs/common';
-import { existsSync } from 'fs';
-import { execSync } from 'child_process';
+import { existsSync, readdirSync } from 'fs';
 import type { Repo } from '@prisma/client';
-import type { RepoVerifyResult } from '@foreman/types';
+import type { WorkspaceVerifyResult } from '@foreman/types';
 import { PrismaService } from '../prisma/prisma.service';
-import { CreateRepoDto } from './dto/create-repo.dto';
-import { UpdateRepoDto } from './dto/update-repo.dto';
+import { CreateWorkspaceDto } from './dto/create-repo.dto';
+import { UpdateWorkspaceDto } from './dto/update-repo.dto';
 
 @Injectable()
-export class ReposService {
-  private readonly logger = new Logger(ReposService.name);
+export class WorkspacesService {
+  private readonly logger = new Logger(WorkspacesService.name);
 
   constructor(private readonly prisma: PrismaService) {}
 
@@ -18,48 +17,52 @@ export class ReposService {
   }
 
   async findOne(id: string): Promise<Repo> {
-    const repo = await this.prisma.repo.findUnique({ where: { id } });
-    if (!repo) throw new NotFoundException(`Repo ${id} not found`);
-    return repo;
+    const workspace = await this.prisma.repo.findUnique({ where: { id } });
+    if (!workspace) throw new NotFoundException(`Workspace ${id} not found`);
+    return workspace;
   }
 
-  create(dto: CreateRepoDto): Promise<Repo> {
+  create(dto: CreateWorkspaceDto): Promise<Repo> {
     return this.prisma.repo.create({
       data: {
         name: dto.name,
         path: dto.path,
-        githubRepo: dto.githubRepo,
         description: dto.description ?? '',
       },
     });
   }
 
-  async update(id: string, dto: UpdateRepoDto): Promise<Repo> {
+  async update(id: string, dto: UpdateWorkspaceDto): Promise<Repo> {
     await this.findOne(id);
     return this.prisma.repo.update({ where: { id }, data: dto });
   }
 
   async remove(id: string): Promise<void> {
     await this.findOne(id);
-    await this.prisma.repo.delete({ where: { id } });
+    await this.prisma.$transaction([
+      this.prisma.task.deleteMany({ where: { repoId: id } }),
+      this.prisma.repo.delete({ where: { id } }),
+    ]);
   }
 
-  async verify(id: string): Promise<RepoVerifyResult> {
-    const repo = await this.findOne(id);
-    const pathExists = existsSync(repo.path);
-    let isGitRepo = false;
-    let canGitStatus = false;
+  async verify(id: string): Promise<WorkspaceVerifyResult> {
+    const workspace = await this.findOne(id);
+    const pathExists = existsSync(workspace.path);
+    let subRepoCount = 0;
 
     if (pathExists) {
-      isGitRepo = existsSync(`${repo.path}/.git`);
       try {
-        execSync('git status', { cwd: repo.path, stdio: 'pipe' });
-        canGitStatus = true;
+        const entries = readdirSync(workspace.path, { withFileTypes: true });
+        for (const entry of entries) {
+          if (entry.isDirectory() && existsSync(`${workspace.path}/${entry.name}/.git`)) {
+            subRepoCount++;
+          }
+        }
       } catch {
-        this.logger.warn(`git status failed for repo ${id} at ${repo.path}`);
+        this.logger.warn(`Cannot scan workspace ${id} at ${workspace.path}`);
       }
     }
 
-    return { pathExists, isGitRepo, canGitStatus };
+    return { pathExists, subRepoCount };
   }
 }

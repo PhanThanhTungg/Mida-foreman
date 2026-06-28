@@ -3,7 +3,7 @@ import { APP_GUARD } from '@nestjs/core';
 import { BullModule } from '@nestjs/bull';
 import { PrismaModule } from './prisma/prisma.module';
 import { HealthModule } from './health/health.module';
-import { ReposModule } from './repos/repos.module';
+import { WorkspacesModule } from './repos/repos.module';
 import { SettingsModule } from './settings/settings.module';
 import { TasksModule } from './tasks/tasks.module';
 import { AgentsModule } from './agents/agents.module';
@@ -17,7 +17,7 @@ import { ApiKeyGuard } from './common/guards/api-key.guard';
     BullModule.forRoot({ redis: process.env.REDIS_URL ?? 'redis://localhost:6379' }),
     PrismaModule,
     HealthModule,
-    ReposModule,
+    WorkspacesModule,
     SettingsModule,
     TasksModule,
     AgentsModule,

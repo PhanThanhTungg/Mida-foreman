@@ -3,7 +3,7 @@ import { spawn } from 'child_process';
 import type { ChildProcess } from 'child_process';
 import type { AgentType, AgentRunResult, RoundContext } from '@foreman/types';
 import { AgentsRegistry } from '../agents/agents.registry';
-import { SettingsService } from '../settings/settings.service';
+
 
 const DEFAULT_CLAUDE_CLI_PATH = 'claude';
 const DEFAULT_PERMISSION_MODE = 'auto';
@@ -22,6 +22,7 @@ interface ProcessOptions {
   timeoutMs?: number;
   onStdoutLine?: (line: string) => void;
   onStderrLine?: (line: string) => void;
+  onSpawn?: (child: ChildProcess) => void;
 }
 
 interface ClaudeResultEvent {
@@ -36,11 +37,18 @@ interface ClaudeResultEvent {
 @Injectable()
 export class ClaudeRunnerService {
   private readonly logger = new Logger(ClaudeRunnerService.name);
+  private readonly activeProcesses = new Map<string, ChildProcess>();
 
-  constructor(
-    private readonly registry: AgentsRegistry,
-    private readonly settings: SettingsService,
-  ) {}
+  constructor(private readonly registry: AgentsRegistry) {}
+
+  kill(taskId: string): void {
+    const proc = this.activeProcesses.get(taskId);
+    if (proc) {
+      proc.kill('SIGTERM');
+      this.activeProcesses.delete(taskId);
+      this.logger.log(`Sent SIGTERM to Claude process for task ${taskId}`);
+    }
+  }
 
   async run(context: RoundContext, agentType: AgentType, onLog?: (line: string) => void): Promise<AgentRunResult> {
     const config = this.registry.getConfig(agentType);
@@ -64,6 +72,7 @@ export class ClaudeRunnerService {
         {
           cwd: context.repoPath,
           timeoutMs: this.claudeTimeoutMs,
+          onSpawn: (child) => this.activeProcesses.set(context.taskId, child),
           onStdoutLine: (line) => {
             const parsed = this.parseClaudeStreamLine(line);
             if (parsed.resultEvent) finalResult = parsed.resultEvent;
@@ -72,6 +81,7 @@ export class ClaudeRunnerService {
           onStderrLine: (line) => log(`[stderr] ${line}`),
         },
       );
+      this.activeProcesses.delete(context.taskId);
 
       if (claudeResult.timedOut) {
         return this.failure(`Claude Code timed out after ${this.claudeTimeoutMs}ms`, logLines);
@@ -127,6 +137,7 @@ export class ClaudeRunnerService {
       this.buildUserPrompt(context),
       '--output-format',
       'stream-json',
+      '--verbose',
       '--permission-mode',
       process.env.CLAUDE_PERMISSION_MODE ?? DEFAULT_PERMISSION_MODE,
       '--append-system-prompt',
@@ -184,8 +195,19 @@ export class ClaudeRunnerService {
     log(`Pushing branch ${branch}`);
     await this.runGit(['push', '-u', 'origin', branch], context.repoPath);
 
-    log('Creating GitHub pull request');
-    return this.createGitHubPullRequest(context.githubRepo, branch, commitMessage, this.buildPullRequestBody(context));
+    log('Creating pull request via gh CLI');
+    const ghResult = await this.runProcess(
+      'gh',
+      ['pr', 'create', '--head', branch, '--base', 'main', '--title', commitMessage, '--body', this.buildPullRequestBody(context)],
+      { cwd: context.repoPath, timeoutMs: 120_000 },
+    );
+
+    if (!ghResult.timedOut && ghResult.code === 0) {
+      const prUrl = this.extractGitHubUrl(ghResult.stdout);
+      if (prUrl) return prUrl;
+    }
+
+    throw new Error(`gh pr create failed: ${ghResult.stderr || ghResult.stdout || 'no output'}`);
   }
 
   private async runGit(args: string[], cwd: string): Promise<ProcessResult> {
@@ -199,53 +221,8 @@ export class ClaudeRunnerService {
     return result;
   }
 
-  private async createGitHubPullRequest(githubRepo: string, branch: string, title: string, body: string): Promise<string> {
-    const cliResult = await this.runProcess(
-      'gh',
-      ['pr', 'create', '--repo', githubRepo, '--head', branch, '--base', 'main', '--title', title, '--body', body],
-      { timeoutMs: 120_000 },
-    );
-
-    if (!cliResult.timedOut && cliResult.code === 0) {
-      const prUrl = this.extractGitHubUrl(cliResult.stdout);
-      if (prUrl) return prUrl;
-    }
-
-    const token = await this.settings.getRaw('github_token');
-    if (!token) {
-      this.logger.warn(
-        `gh pr create failed and github_token is not configured; returning compare URL instead: ${cliResult.stderr || cliResult.stdout || 'no output'}`,
-      );
-      return this.buildCompareUrl(githubRepo, branch);
-    }
-
-    const response = await fetch(`https://api.github.com/repos/${githubRepo}/pulls`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: 'application/vnd.github+json',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ title, body, head: branch, base: 'main' }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`GitHub PR creation failed: ${response.status} ${await response.text()}`);
-    }
-
-    const pr = (await response.json()) as { html_url?: string };
-    if (!pr.html_url) {
-      throw new Error('GitHub PR creation response did not include html_url');
-    }
-    return pr.html_url;
-  }
-
   private extractGitHubUrl(output: string): string | null {
     return output.match(/https:\/\/github\.com\/\S+/)?.[0] ?? null;
-  }
-
-  private buildCompareUrl(githubRepo: string, branch: string): string {
-    return `https://github.com/${githubRepo}/compare/main...${encodeURIComponent(branch)}?expand=1`;
   }
 
   private runProcess(command: string, args: string[], options: ProcessOptions = {}): Promise<ProcessResult> {
@@ -257,6 +234,7 @@ export class ClaudeRunnerService {
           env: process.env,
           stdio: ['ignore', 'pipe', 'pipe'],
         });
+        options.onSpawn?.(child);
       } catch (err) {
         resolve({
           code: null,

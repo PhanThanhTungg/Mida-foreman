@@ -26,7 +26,6 @@ export interface AgentRunResult {
 export interface RoundContext {
   taskId: string;
   repoPath: string;
-  githubRepo: string;
   issueKey: string;
   title: string;
   round: number;

@@ -1,13 +1,12 @@
 import { Test } from '@nestjs/testing';
 import { NotFoundException } from '@nestjs/common';
-import { ReposService } from './repos.service';
+import { WorkspacesService } from './repos.service';
 import { PrismaService } from '../prisma/prisma.service';
 
-const fakeRepo = {
-  id: 'repo-1',
-  name: 'my-app',
-  path: '/repos/my-app',
-  githubRepo: 'org/my-app',
+const fakeWorkspace = {
+  id: 'ws-1',
+  name: 'my-projects',
+  path: '/home/user/projects',
   description: '',
   active: true,
   createdAt: new Date(),
@@ -15,50 +14,50 @@ const fakeRepo = {
 
 const mockPrisma = {
   repo: {
-    findMany: jest.fn().mockResolvedValue([fakeRepo]),
-    findUnique: jest.fn().mockResolvedValue(fakeRepo),
-    create: jest.fn().mockResolvedValue(fakeRepo),
-    update: jest.fn().mockResolvedValue(fakeRepo),
-    delete: jest.fn().mockResolvedValue(fakeRepo),
+    findMany: jest.fn().mockResolvedValue([fakeWorkspace]),
+    findUnique: jest.fn().mockResolvedValue(fakeWorkspace),
+    create: jest.fn().mockResolvedValue(fakeWorkspace),
+    update: jest.fn().mockResolvedValue(fakeWorkspace),
+    delete: jest.fn().mockResolvedValue(fakeWorkspace),
   },
 };
 
-describe('ReposService', () => {
-  let service: ReposService;
+describe('WorkspacesService', () => {
+  let service: WorkspacesService;
 
   beforeEach(async () => {
     const module = await Test.createTestingModule({
-      providers: [ReposService, { provide: PrismaService, useValue: mockPrisma }],
+      providers: [WorkspacesService, { provide: PrismaService, useValue: mockPrisma }],
     }).compile();
-    service = module.get(ReposService);
+    service = module.get(WorkspacesService);
     jest.clearAllMocks();
-    mockPrisma.repo.findUnique.mockResolvedValue(fakeRepo);
+    mockPrisma.repo.findUnique.mockResolvedValue(fakeWorkspace);
   });
 
   it('findAll returns array', async () => {
     const result = await service.findAll();
-    expect(result).toEqual([fakeRepo]);
+    expect(result).toEqual([fakeWorkspace]);
   });
 
-  it('findOne returns repo', async () => {
-    const result = await service.findOne('repo-1');
-    expect(result.id).toBe('repo-1');
+  it('findOne returns workspace', async () => {
+    const result = await service.findOne('ws-1');
+    expect(result.id).toBe('ws-1');
   });
 
-  it('findOne throws NotFoundException for missing repo', async () => {
+  it('findOne throws NotFoundException for missing workspace', async () => {
     mockPrisma.repo.findUnique.mockResolvedValueOnce(null);
     await expect(service.findOne('missing')).rejects.toThrow(NotFoundException);
   });
 
-  it('create delegates to prisma', async () => {
-    await service.create({ name: 'my-app', path: '/repos/my-app', githubRepo: 'org/my-app' });
+  it('create delegates to prisma without githubRepo', async () => {
+    await service.create({ name: 'my-projects', path: '/home/user/projects' });
     expect(mockPrisma.repo.create).toHaveBeenCalledWith({
-      data: { name: 'my-app', path: '/repos/my-app', githubRepo: 'org/my-app', description: '' },
+      data: { name: 'my-projects', path: '/home/user/projects', description: '' },
     });
   });
 
-  it('remove deletes repo', async () => {
-    await service.remove('repo-1');
-    expect(mockPrisma.repo.delete).toHaveBeenCalledWith({ where: { id: 'repo-1' } });
+  it('remove deletes workspace', async () => {
+    await service.remove('ws-1');
+    expect(mockPrisma.repo.delete).toHaveBeenCalledWith({ where: { id: 'ws-1' } });
   });
 });

@@ -3,9 +3,9 @@ import { BullModule } from '@nestjs/bull';
 import Redis from 'ioredis';
 import { TaskProcessor } from './task.processor';
 import { ClaudeRunnerService } from './claude-runner.service';
-import { RepoLockService } from './repo-lock.service';
+import { WorkspaceLockService } from './repo-lock.service';
 import { SuccessObserverService } from './success-observer.service';
-import { ReposModule } from '../repos/repos.module';
+import { WorkspacesModule } from '../repos/repos.module';
 import { SettingsModule } from '../settings/settings.module';
 import { AgentsModule } from '../agents/agents.module';
 import { GatewayModule } from '../gateway/gateway.module';
@@ -13,7 +13,7 @@ import { GatewayModule } from '../gateway/gateway.module';
 @Module({
   imports: [
     BullModule.registerQueue({ name: 'foreman-tasks' }),
-    ReposModule,
+    WorkspacesModule,
     SettingsModule,
     AgentsModule,
     GatewayModule,
@@ -25,8 +25,9 @@ import { GatewayModule } from '../gateway/gateway.module';
     },
     TaskProcessor,
     ClaudeRunnerService,
-    RepoLockService,
+    WorkspaceLockService,
     SuccessObserverService,
   ],
+  exports: [ClaudeRunnerService, WorkspaceLockService],
 })
 export class WorkersModule {}

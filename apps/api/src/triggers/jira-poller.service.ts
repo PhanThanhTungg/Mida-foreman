@@ -3,7 +3,7 @@ import { Injectable, Logger, OnApplicationBootstrap, OnApplicationShutdown } fro
 import type { AgentType } from '@foreman/types';
 import { PrismaService } from '../prisma/prisma.service';
 import { SettingsService } from '../settings/settings.service';
-import { ReposService } from '../repos/repos.service';
+import { WorkspacesService } from '../repos/repos.service';
 import { OrchestratorService } from '../tasks/orchestrator.service';
 
 const DEFAULT_POLL_INTERVAL_MS = 60_000;
@@ -25,7 +25,7 @@ export class JiraPollerService implements OnApplicationBootstrap, OnApplicationS
   constructor(
     private readonly prisma: PrismaService,
     private readonly settings: SettingsService,
-    private readonly repos: ReposService,
+    private readonly repos: WorkspacesService,
     private readonly orchestrator: OrchestratorService,
   ) {}
 
@@ -66,13 +66,16 @@ export class JiraPollerService implements OnApplicationBootstrap, OnApplicationS
     }
 
     const jql = 'project in (MAH, MIDA) AND status = "To Do" AND assignee = currentUser()';
-    const url = `${baseUrl}/rest/api/3/search?jql=${encodeURIComponent(jql)}&fields=summary,labels&maxResults=50`;
+    const url = `${baseUrl}/rest/api/3/search/jql`;
 
     const response = await fetch(url, {
+      method: 'POST',
       headers: {
         Authorization: `Basic ${Buffer.from(`${email}:${token}`).toString('base64')}`,
         Accept: 'application/json',
+        'Content-Type': 'application/json',
       },
+      body: JSON.stringify({ jql, fields: ['summary', 'labels'], maxResults: 50 }),
     });
 
     if (!response.ok) {
@@ -90,7 +93,7 @@ export class JiraPollerService implements OnApplicationBootstrap, OnApplicationS
 
   private async processIssue(
     issue: JiraIssue,
-    allRepos: Awaited<ReturnType<ReposService['findAll']>>,
+    allRepos: Awaited<ReturnType<WorkspacesService['findAll']>>,
   ): Promise<void> {
     if (this.processedKeys.has(issue.key)) return;
 
@@ -109,11 +112,11 @@ export class JiraPollerService implements OnApplicationBootstrap, OnApplicationS
       return;
     }
 
-    const repoLabel = labels.find((l) => l.startsWith('repo:'));
-    const repoName = repoLabel?.replace('repo:', '');
-    const repo = allRepos.find((r) => r.name === repoName);
+    const workspaceLabel = labels.find((l) => l.startsWith('workspace:'));
+    const workspaceName = workspaceLabel?.replace('workspace:', '');
+    const repo = allRepos.find((r) => r.name === workspaceName);
     if (!repo) {
-      this.logger.warn(`Issue ${issue.key}: repo "${repoName}" not found — skipping`);
+      this.logger.warn(`Issue ${issue.key}: workspace "${workspaceName}" not found — skipping`);
       return;
     }
 
@@ -130,6 +133,6 @@ export class JiraPollerService implements OnApplicationBootstrap, OnApplicationS
 
     await this.orchestrator.enqueue(task.id);
     this.processedKeys.add(issue.key);
-    this.logger.log(`Enqueued ${issue.key} as ${agentType} task for repo ${repoName}`);
+    this.logger.log(`Enqueued ${issue.key} as ${agentType} task for workspace ${workspaceName}`);
   }
 }

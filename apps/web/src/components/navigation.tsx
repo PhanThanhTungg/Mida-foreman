@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils';
 
 const links = [
   { href: '/tasks', label: 'Tasks' },
-  { href: '/repos', label: 'Repos' },
+  { href: '/workspaces', label: 'Workspaces' },
   { href: '/settings', label: 'Settings' },
 ];
 

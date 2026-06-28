@@ -1,11 +1,11 @@
 import { Processor, Process, InjectQueue } from '@nestjs/bull';
-import { Logger } from '@nestjs/common';
+import { Logger, OnModuleInit } from '@nestjs/common';
 import type { Job, Queue } from 'bull';
 import type { AgentType } from '@foreman/types';
 import { PrismaService } from '../prisma/prisma.service';
-import { ReposService } from '../repos/repos.service';
+import { WorkspacesService } from '../repos/repos.service';
 import { ClaudeRunnerService } from './claude-runner.service';
-import { RepoLockService } from './repo-lock.service';
+import { WorkspaceLockService } from './repo-lock.service';
 import { SuccessObserverService } from './success-observer.service';
 import { AgentsRegistry } from '../agents/agents.registry';
 import { ForemanGateway } from '../gateway/foreman.gateway';
@@ -13,19 +13,28 @@ import { ForemanGateway } from '../gateway/foreman.gateway';
 const REQUEUE_DELAY_MS = 60_000;
 
 @Processor('foreman-tasks')
-export class TaskProcessor {
+export class TaskProcessor implements OnModuleInit {
   private readonly logger = new Logger(TaskProcessor.name);
 
   constructor(
     @InjectQueue('foreman-tasks') private readonly queue: Queue,
     private readonly prisma: PrismaService,
-    private readonly repos: ReposService,
+    private readonly repos: WorkspacesService,
     private readonly runner: ClaudeRunnerService,
-    private readonly lock: RepoLockService,
+    private readonly lock: WorkspaceLockService,
     private readonly observer: SuccessObserverService,
     private readonly registry: AgentsRegistry,
     private readonly gateway: ForemanGateway,
   ) {}
+
+  async onModuleInit(): Promise<void> {
+    const stale = await this.prisma.task.findMany({ where: { status: 'running' } });
+    for (const task of stale) {
+      await this.lock.release(task.repoId);
+      await this.prisma.task.update({ where: { id: task.id }, data: { status: 'queued' } });
+      this.logger.warn(`Recovered stale task ${task.id} — released lock and re-queued`);
+    }
+  }
 
   @Process('process-task')
   async handleTask(job: Job<{ taskId: string }>): Promise<void> {
@@ -37,7 +46,7 @@ export class TaskProcessor {
 
     const acquired = await this.lock.acquire(task.repoId);
     if (!acquired) {
-      this.logger.warn(`Repo ${task.repoId} locked — requeueing task ${taskId}`);
+      this.logger.warn(`Workspace ${task.repoId} locked — requeueing task ${taskId}`);
       await this.queue.add('process-task', { taskId }, { delay: REQUEUE_DELAY_MS });
       return;
     }
@@ -57,7 +66,6 @@ export class TaskProcessor {
         {
           taskId,
           repoPath: repo.path,
-          githubRepo: repo.githubRepo,
           issueKey: task.issueKey,
           title: task.title,
           round: nextRound,
@@ -66,6 +74,13 @@ export class TaskProcessor {
         task.agentType as AgentType,
         (line) => this.gateway.emitLog(taskId, line),
       );
+
+      // Task may have been deleted while Claude was running
+      const stillExists = await this.prisma.task.findUnique({ where: { id: taskId }, select: { id: true } });
+      if (!stillExists) {
+        this.logger.warn(`Task ${taskId} was deleted during execution, skipping status update`);
+        return;
+      }
 
       const succeeded = await this.observer.check(config.successConditions, result);
 

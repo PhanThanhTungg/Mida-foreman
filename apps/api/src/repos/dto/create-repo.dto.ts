@@ -1,23 +1,18 @@
 import { IsString, IsNotEmpty, IsOptional } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
-export class CreateRepoDto {
-  @ApiProperty({ example: 'my-app' })
+export class CreateWorkspaceDto {
+  @ApiProperty({ example: 'my-projects' })
   @IsString()
   @IsNotEmpty()
   name!: string;
 
-  @ApiProperty({ example: '/home/user/repos/my-app' })
+  @ApiProperty({ example: '/home/user/projects' })
   @IsString()
   @IsNotEmpty()
   path!: string;
 
-  @ApiProperty({ example: 'org/my-app' })
-  @IsString()
-  @IsNotEmpty()
-  githubRepo!: string;
-
-  @ApiPropertyOptional({ example: 'Main customer-facing app' })
+  @ApiPropertyOptional({ example: 'Main projects folder' })
   @IsOptional()
   @IsString()
   description?: string;

@@ -3,9 +3,10 @@ import { BullModule } from '@nestjs/bull';
 import { TasksController } from './tasks.controller';
 import { TasksService } from './tasks.service';
 import { OrchestratorService } from './orchestrator.service';
+import { WorkersModule } from '../workers/workers.module';
 
 @Module({
-  imports: [BullModule.registerQueue({ name: 'foreman-tasks' })],
+  imports: [BullModule.registerQueue({ name: 'foreman-tasks' }), WorkersModule],
   controllers: [TasksController],
   providers: [TasksService, OrchestratorService],
   exports: [OrchestratorService],
