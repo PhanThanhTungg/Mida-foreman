@@ -1,0 +1,32 @@
+version: '3.9'
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      target: development
+    volumes:
+      - ./apps/api/src:/app/apps/api/src
+      - ./packages:/app/packages
+      - api_nm:/app/node_modules
+      - api_app_nm:/app/apps/api/node_modules
+    command: pnpm --filter @foreman/api dev
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      target: development
+    volumes:
+      - ./apps/web/src:/app/apps/web/src
+      - ./packages:/app/packages
+      - web_nm:/app/node_modules
+      - web_app_nm:/app/apps/web/node_modules
+    command: pnpm --filter @foreman/web dev
+
+volumes:
+  api_nm:
+  api_app_nm:
+  web_nm:
+  web_app_nm:
