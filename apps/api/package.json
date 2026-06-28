@@ -31,6 +31,9 @@
     "rxjs": "^7.8.1",
     "socket.io": "^4.7.5"
   },
+  "prisma": {
+    "schema": "prisma/schema.prisma"
+  },
   "devDependencies": {
     "@nestjs/cli": "^10.3.2",
     "@nestjs/schematics": "^10.1.1",
