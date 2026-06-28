@@ -10,6 +10,28 @@ const DEFAULT_PERMISSION_MODE = 'auto';
 const DEFAULT_TIMEOUT_MS = 30 * 60 * 1000;
 const PREFLIGHT_TIMEOUT_MS = 30 * 1000;
 
+const A = {
+  reset: '\x1b[0m',
+  bold: '\x1b[1m',
+  dim: '\x1b[2m',
+  red: '\x1b[31m',
+  green: '\x1b[32m',
+  yellow: '\x1b[33m',
+  cyan: '\x1b[36m',
+  gray: '\x1b[90m',
+  brightRed: '\x1b[91m',
+  brightGreen: '\x1b[92m',
+  brightYellow: '\x1b[93m',
+  brightCyan: '\x1b[96m',
+  brightWhite: '\x1b[97m',
+} as const;
+
+function stripAnsi(s: string): string {
+  return s.replace(/\x1b\[[0-9;]*m/g, '');
+}
+
+const SEP = `${A.dim}${'─'.repeat(64)}${A.reset}`;
+
 interface ProcessResult {
   code: number | null;
   stdout: string;
@@ -57,11 +79,12 @@ export class ClaudeRunnerService {
 
     const log = (line: string) => {
       logLines.push(line);
-      this.logger.log(`[Task ${context.taskId}] ${line}`);
+      this.logger.log(`[Task ${context.taskId}] ${stripAnsi(line)}`);
       onLog?.(line);
     };
 
-    log(`=== Round ${context.round} start - ${agentType} Claude Code agent ===`);
+    log(`${SEP}`);
+    log(`${A.bold}${A.brightCyan}◆ Round ${context.round}${A.reset}  ${A.dim}${agentType} agent  ·  ${context.issueKey}${A.reset}`);
 
     try {
       await this.preflight(log);
@@ -76,7 +99,7 @@ export class ClaudeRunnerService {
           onStdoutLine: (line) => {
             const parsed = this.parseClaudeStreamLine(line);
             if (parsed.resultEvent) finalResult = parsed.resultEvent;
-            if (parsed.logLine) log(parsed.logLine);
+            for (const logLine of parsed.logLines) log(logLine);
           },
           onStderrLine: (line) => log(`[stderr] ${line}`),
         },
@@ -100,13 +123,13 @@ export class ClaudeRunnerService {
         return this.failure(message, logLines);
       }
 
-      log('Claude Code completed; checking repository changes');
+      log(`${A.dim}Checking repository changes…${A.reset}`);
       const mrUrl = await this.createPullRequestFromChanges(context, log);
 
       return { success: true, mrUrl, error: null, log: logLines.join('\n') };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      log(`Runner error: ${message}`);
+      log(`${A.brightRed}✗ Runner error: ${message}${A.reset}`);
       return this.failure(message, logLines);
     }
   }
@@ -117,7 +140,7 @@ export class ClaudeRunnerService {
       throw new Error(`Claude Code CLI is not installed or not executable: ${version.stderr || version.stdout || 'no output'}`);
     }
 
-    log(`Claude Code CLI: ${version.stdout.trim() || this.claudeCliPath}`);
+    log(`${A.dim}  CLI: ${version.stdout.trim() || this.claudeCliPath}${A.reset}`);
 
     const auth = await this.runProcess(this.claudeCliPath, ['auth', 'status'], { timeoutMs: PREFLIGHT_TIMEOUT_MS });
     if (auth.timedOut || auth.code !== 0) {
@@ -128,7 +151,7 @@ export class ClaudeRunnerService {
       throw new Error('Claude Code CLI is not authenticated. Run `claude auth login` on the worker host.');
     }
 
-    log('Claude Code auth status OK');
+    log(`${A.dim}  auth OK${A.reset}`);
   }
 
   private buildClaudeArgs(context: RoundContext, systemPrompt: string): string[] {
@@ -183,19 +206,19 @@ export class ClaudeRunnerService {
     const branch = this.buildBranchName(context);
     const commitMessage = this.buildCommitMessage(context);
 
-    log(`Creating branch ${branch}`);
+    log(`${A.dim}  Creating branch ${A.reset}${A.brightYellow}${branch}${A.reset}`);
     await this.runGit(['checkout', '-B', branch], context.repoPath);
 
-    log('Staging changes');
+    log(`${A.dim}  Staging changes…${A.reset}`);
     await this.runGit(['add', '-A'], context.repoPath);
 
-    log(`Committing changes: ${commitMessage}`);
+    log(`${A.dim}  Committing: ${commitMessage}${A.reset}`);
     await this.runGit(['commit', '-m', commitMessage], context.repoPath);
 
-    log(`Pushing branch ${branch}`);
+    log(`${A.dim}  Pushing ${branch}…${A.reset}`);
     await this.runGit(['push', '-u', 'origin', branch], context.repoPath);
 
-    log('Creating pull request via gh CLI');
+    log(`${A.dim}  Creating pull request via gh CLI…${A.reset}`);
     const ghResult = await this.runProcess(
       'gh',
       ['pr', 'create', '--head', branch, '--base', 'main', '--title', commitMessage, '--body', this.buildPullRequestBody(context)],
@@ -303,57 +326,165 @@ export class ClaudeRunnerService {
     });
   }
 
-  private parseClaudeStreamLine(line: string): { logLine: string | null; resultEvent: ClaudeResultEvent | null } {
+  private parseClaudeStreamLine(line: string): { logLines: string[]; resultEvent: ClaudeResultEvent | null } {
     try {
       const parsed = JSON.parse(line) as ClaudeResultEvent & Record<string, unknown>;
-      const logLine = this.formatClaudeEvent(parsed);
       return {
-        logLine,
+        logLines: this.formatClaudeEvent(parsed),
         resultEvent: parsed.type === 'result' ? parsed : null,
       };
     } catch {
-      return { logLine: line, resultEvent: null };
+      return { logLines: [line], resultEvent: null };
     }
   }
 
-  private formatClaudeEvent(event: ClaudeResultEvent & Record<string, unknown>): string | null {
-    if (event.type === 'system') {
-      const subtype = typeof event.subtype === 'string' ? event.subtype : 'event';
-      return `Claude system: ${subtype}`;
+  private formatClaudeEvent(event: Record<string, unknown>): string[] {
+    switch (event.type) {
+      case 'system': return this.fmtSystem(event);
+      case 'assistant': return this.fmtAssistant(event);
+      case 'user': return this.fmtUser(event);
+      case 'result': return this.fmtResult(event);
+      default: return [];
     }
-
-    if (event.type === 'assistant') {
-      const text = this.extractAssistantText(event.message);
-      return text ? `Claude: ${text}` : null;
-    }
-
-    if (event.type === 'result') {
-      const summary = typeof event.result === 'string' && event.result.trim() ? ` - ${event.result.trim()}` : '';
-      const cost = typeof event.total_cost_usd === 'number' ? ` cost=$${event.total_cost_usd.toFixed(4)}` : '';
-      const duration = typeof event.duration_ms === 'number' ? ` duration=${event.duration_ms}ms` : '';
-      return `Claude result: ${event.is_error === true ? 'error' : 'success'}${cost}${duration}${summary}`;
-    }
-
-    return null;
   }
 
-  private extractAssistantText(message: unknown): string | null {
-    if (!message || typeof message !== 'object' || !('content' in message)) return null;
-    const content = (message as { content?: unknown }).content;
-    if (!Array.isArray(content)) return null;
+  private fmtSystem(event: Record<string, unknown>): string[] {
+    if (event.subtype !== 'init') return [];
+    const model = typeof event.model === 'string' ? event.model : '';
+    const mode = typeof event.permissionMode === 'string' ? event.permissionMode : '';
+    const cwd = typeof event.cwd === 'string' ? event.cwd : '';
+    const tools = Array.isArray(event.tools) ? (event.tools as string[]).join(', ') : '';
+    return [
+      '',
+      SEP,
+      `${A.bold}${A.brightCyan}◆ ${model}${A.reset}${mode ? `  ${A.dim}·  ${mode}${A.reset}` : ''}`,
+      cwd ? `${A.dim}  ${cwd}${A.reset}` : '',
+      tools ? `${A.dim}  Tools: ${tools}${A.reset}` : '',
+      SEP,
+      '',
+    ].filter(l => l !== '');
+  }
 
-    const text = content
-      .map((block) => {
-        if (!block || typeof block !== 'object') return null;
-        const typed = block as { type?: unknown; text?: unknown; name?: unknown };
-        if (typed.type === 'text' && typeof typed.text === 'string') return typed.text;
-        if (typed.type === 'tool_use' && typeof typed.name === 'string') return `Using tool: ${typed.name}`;
-        return null;
-      })
-      .filter((part): part is string => Boolean(part))
-      .join('\n');
+  private fmtAssistant(event: Record<string, unknown>): string[] {
+    const msg = event.message as Record<string, unknown> | null;
+    if (!msg || !Array.isArray(msg.content)) return [];
+    const lines: string[] = [];
+    for (const block of msg.content as Array<Record<string, unknown>>) {
+      if (block.type === 'text' && typeof block.text === 'string') {
+        const text = block.text.trim();
+        if (text) {
+          lines.push(...text.split('\n').map(l => `${A.brightWhite}${l}${A.reset}`));
+          lines.push('');
+        }
+      } else if (block.type === 'tool_use') {
+        lines.push(...this.fmtToolUse(block));
+      }
+    }
+    return lines;
+  }
 
-    return text || null;
+  private fmtToolUse(block: Record<string, unknown>): string[] {
+    const name = typeof block.name === 'string' ? block.name : 'Unknown';
+    const input = (block.input as Record<string, unknown>) ?? {};
+
+    if (name === 'Bash') {
+      const cmd = typeof input.command === 'string' ? input.command : JSON.stringify(input);
+      return [`  ${A.dim}${A.bold}$${A.reset} ${A.yellow}${cmd}${A.reset}`];
+    }
+
+    let detail = '';
+    const extra: string[] = [];
+    const namePad = name.padEnd(14);
+
+    switch (name) {
+      case 'Read':
+        detail = `${A.dim}${input.file_path ?? ''}${A.reset}`;
+        break;
+      case 'Write': {
+        const bytes = typeof input.content === 'string' ? input.content.length : 0;
+        detail = `${A.dim}${input.file_path ?? ''}${A.reset}`;
+        extra.push(`       ${A.dim}↳ ${bytes} bytes${A.reset}`);
+        break;
+      }
+      case 'Edit':
+      case 'MultiEdit':
+        detail = `${A.dim}${input.file_path ?? ''}${A.reset}`;
+        break;
+      case 'Glob':
+        detail = `${A.dim}${input.pattern ?? ''}${A.reset}`;
+        break;
+      case 'Grep':
+        detail = `${A.dim}${input.pattern ?? ''}${input.path ? `  in: ${input.path}` : ''}${A.reset}`;
+        break;
+      case 'LS':
+        detail = `${A.dim}${input.path ?? ''}${A.reset}`;
+        break;
+      case 'WebFetch':
+        detail = `${A.dim}${input.url ?? ''}${A.reset}`;
+        break;
+      case 'WebSearch':
+        detail = `${A.dim}"${input.query ?? ''}"${A.reset}`;
+        break;
+      default:
+        detail = `${A.dim}${JSON.stringify(input).slice(0, 80)}${A.reset}`;
+    }
+
+    return [
+      `  ${A.cyan}⬡${A.reset} ${A.bold}${A.cyan}${namePad}${A.reset}  ${detail}`,
+      ...extra,
+    ];
+  }
+
+  private fmtUser(event: Record<string, unknown>): string[] {
+    const msg = event.message as Record<string, unknown> | null;
+    if (!msg || !Array.isArray(msg.content)) return [];
+    const lines: string[] = [];
+    for (const block of msg.content as Array<Record<string, unknown>>) {
+      if (block.type !== 'tool_result') continue;
+      const isError = block.is_error === true;
+      const raw = block.content;
+      let text = '';
+      if (Array.isArray(raw)) {
+        text = (raw as Array<Record<string, unknown>>)
+          .filter(c => c.type === 'text' && typeof c.text === 'string')
+          .map(c => c.text as string)
+          .join('');
+      } else if (typeof raw === 'string') {
+        text = raw;
+      }
+      if (!text.trim()) continue;
+      if (isError) {
+        const errLines = text.trim().split('\n').slice(0, 12);
+        lines.push(`       ${A.brightRed}✗${A.reset} ${A.red}${errLines.join(`\n         `)}${A.reset}`, '');
+      } else {
+        const count = text.trim().split('\n').length;
+        lines.push(`       ${A.dim}↳ ${count} ${count === 1 ? 'line' : 'lines'}${A.reset}`);
+      }
+    }
+    return lines;
+  }
+
+  private fmtResult(event: Record<string, unknown>): string[] {
+    const isError = event.is_error === true;
+    const cost = typeof event.total_cost_usd === 'number'
+      ? `$${(event.total_cost_usd as number).toFixed(4)}`
+      : '';
+    const duration = typeof event.duration_ms === 'number'
+      ? `${((event.duration_ms as number) / 1000).toFixed(1)}s`
+      : '';
+    const summary = typeof event.result === 'string' ? event.result.trim() : '';
+    const meta = [cost, duration].filter(Boolean).join('  ·  ');
+    const status = isError
+      ? `${A.bold}${A.brightRed}✗  Failed${A.reset}`
+      : `${A.bold}${A.brightGreen}✓  Done${A.reset}`;
+
+    const lines = ['', SEP, `${status}${meta ? `  ${A.dim}·  ${meta}${A.reset}` : ''}`];
+    if (summary) {
+      lines.push('');
+      lines.push(...summary.split('\n').map(l => `${A.dim}${l}${A.reset}`));
+    }
+    lines.push('');
+    return lines;
   }
 
   private isClaudeLoggedIn(stdout: string): boolean {

@@ -1,37 +1,121 @@
 'use client';
-import { useEffect, useRef } from 'react';
-import { useTaskLog } from '@/hooks/use-task-log';
+import '@xterm/xterm/css/xterm.css';
+import { useEffect, useRef, useState } from 'react';
+import { io } from 'socket.io-client';
+import type { WsMessage } from '@foreman/types';
+import { WS_URL } from '@/lib/constants';
 
 interface Props { taskId: string | null; initialLog: string; }
 
 export function LogViewer({ taskId, initialLog }: Props) {
-  const { lines } = useTaskLog(taskId, initialLog);
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const termRef = useRef<import('@xterm/xterm').Terminal | null>(null);
+  const fitRef = useRef<import('@xterm/addon-fit').FitAddon | null>(null);
+  const [termReady, setTermReady] = useState(false);
 
+  // Initialize terminal once on mount
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [lines.length]);
+    if (!containerRef.current) return;
+    let disposed = false;
 
-  if (!taskId) {
-    return (
-      <div className="flex items-center justify-center h-full text-slate-600 text-sm">
-        Select a task to view its log
-      </div>
-    );
-  }
+    Promise.all([
+      import('@xterm/xterm'),
+      import('@xterm/addon-fit'),
+    ]).then(([{ Terminal }, { FitAddon }]) => {
+      if (disposed || !containerRef.current) return;
+
+      const term = new Terminal({
+        convertEol: true,
+        cursorBlink: false,
+        disableStdin: true,
+        scrollback: 10000,
+        fontFamily: 'Menlo, Monaco, "Courier New", monospace',
+        fontSize: 13,
+        lineHeight: 1.4,
+        theme: {
+          background: '#0d1117',
+          foreground: '#c9d1d9',
+          cursor: '#c9d1d9',
+          black: '#484f58',
+          red: '#ff7b72',
+          green: '#3fb950',
+          yellow: '#d29922',
+          blue: '#58a6ff',
+          magenta: '#bc8cff',
+          cyan: '#39c5cf',
+          white: '#b1bac4',
+          brightBlack: '#6e7681',
+          brightRed: '#ffa198',
+          brightGreen: '#56d364',
+          brightYellow: '#e3b341',
+          brightBlue: '#79c0ff',
+          brightMagenta: '#d2a8ff',
+          brightCyan: '#56d4dd',
+          brightWhite: '#f0f6fc',
+        },
+      });
+
+      const fit = new FitAddon();
+      term.loadAddon(fit);
+      term.open(containerRef.current);
+
+      // Wait for browser layout before measuring dimensions
+      requestAnimationFrame(() => {
+        if (disposed) return;
+        fit.fit();
+        termRef.current = term;
+        fitRef.current = fit;
+        setTermReady(true);
+      });
+    });
+
+    const observer = new ResizeObserver(() => fitRef.current?.fit());
+    observer.observe(containerRef.current);
+
+    return () => {
+      disposed = true;
+      observer.disconnect();
+      termRef.current?.dispose();
+      termRef.current = null;
+      fitRef.current = null;
+    };
+  }, []);
+
+  // Write log whenever terminal becomes ready or task/log changes
+  useEffect(() => {
+    if (!termReady || !termRef.current) return;
+    const term = termRef.current;
+    term.clear();
+    if (initialLog) {
+      for (const line of initialLog.split('\n')) {
+        term.writeln(line);
+      }
+    }
+  }, [termReady, taskId, initialLog]);
+
+  // Stream live log lines via WebSocket
+  useEffect(() => {
+    if (!taskId) return;
+    const socket = io(`${WS_URL}/ws`, { transports: ['websocket'] });
+    socket.on('message', (msg: WsMessage) => {
+      if (msg.taskId !== taskId || msg.type !== 'log') return;
+      termRef.current?.writeln(msg.line);
+    });
+    return () => { socket.disconnect(); };
+  }, [taskId]);
 
   return (
-    <div className="h-full bg-[#0d1117] rounded-lg p-4 overflow-y-auto font-mono text-sm">
-      {lines.length === 0 ? (
-        <span className="text-slate-600">No log output yet…</span>
-      ) : (
-        lines.map((line, i) => (
-          <div key={i} className={line.startsWith('---') ? 'text-slate-500 my-2' : 'text-[#c9d1d9]'}>
-            {line}
-          </div>
-        ))
+    <div className="h-full w-full relative rounded-lg overflow-hidden">
+      {!taskId && (
+        <div className="absolute inset-0 flex items-center justify-center text-slate-600 text-sm z-10">
+          Select a task to view its log
+        </div>
       )}
-      <div ref={bottomRef} />
+      <div
+        ref={containerRef}
+        className="h-full w-full"
+        style={{ visibility: taskId ? 'visible' : 'hidden' }}
+      />
     </div>
   );
 }
