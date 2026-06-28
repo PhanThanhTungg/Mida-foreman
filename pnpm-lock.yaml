@@ -21,7 +21,7 @@ importers:
   apps/api:
     dependencies:
       '@anthropic-ai/sdk':
-        specifier: ^0.24.0
+        specifier: ^0.24.3
         version: 0.24.3
       '@foreman/types':
         specifier: workspace:*
