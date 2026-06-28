@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { BullModule } from '@nestjs/bull';
+import Redis from 'ioredis';
 import { TaskProcessor } from './task.processor';
 import { ClaudeRunnerService } from './claude-runner.service';
 import { ToolExecutorService } from './tool-executor.service';
@@ -17,6 +18,10 @@ import { AgentsModule } from '../agents/agents.module';
     AgentsModule,
   ],
   providers: [
+    {
+      provide: 'REDIS_CLIENT',
+      useFactory: () => new Redis(process.env.REDIS_URL ?? 'redis://localhost:6379'),
+    },
     TaskProcessor,
     ClaudeRunnerService,
     ToolExecutorService,
