@@ -9,6 +9,7 @@ import { TasksModule } from './tasks/tasks.module';
 import { AgentsModule } from './agents/agents.module';
 import { WorkersModule } from './workers/workers.module';
 import { GatewayModule } from './gateway/gateway.module';
+import { TriggersModule } from './triggers/triggers.module';
 import { ApiKeyGuard } from './common/guards/api-key.guard';
 
 @Module({
@@ -22,6 +23,7 @@ import { ApiKeyGuard } from './common/guards/api-key.guard';
     AgentsModule,
     WorkersModule,
     GatewayModule,
+    TriggersModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ApiKeyGuard }],
 })
