@@ -18,11 +18,11 @@ const PHASES: Array<{ phase: TaskProgressPhase; label: string }> = [
 ];
 
 const STATUS_STYLES: Record<TaskProgressStatus | 'pending', string> = {
-  pending: 'border-slate-800 bg-slate-950 text-slate-600',
-  started: 'border-blue-500/60 bg-blue-950/60 text-blue-200',
-  completed: 'border-green-600/50 bg-green-950/50 text-green-200',
-  failed: 'border-red-600/60 bg-red-950/60 text-red-200',
-  skipped: 'border-slate-700 bg-slate-900 text-slate-400',
+  pending: 'border-[#20262e] bg-black text-slate-600',
+  started: 'border-[#1f6feb]/60 bg-[#0d2a4c] text-[#79c0ff]',
+  completed: 'border-emerald-500/50 bg-emerald-950/50 text-emerald-200',
+  failed: 'border-red-500/60 bg-red-950/60 text-red-200',
+  skipped: 'border-[#27313d] bg-[#0d131a] text-slate-400',
   looped: 'border-amber-500/60 bg-amber-950/60 text-amber-200',
 };
 
@@ -35,15 +35,19 @@ export function TaskProgressGraph({ task }: Props) {
 
   if (!task) {
     return (
-      <div className="h-full rounded-lg border border-slate-800 bg-slate-950 flex items-center justify-center text-sm text-slate-600">
-        Select a task to view its progress
+      <div className="flex h-full items-center justify-center bg-black text-center">
+        <div>
+          <Circle className="mx-auto mb-4 size-9 text-slate-700" strokeWidth={1.75} />
+          <div className="text-sm font-medium text-slate-600">No task selected</div>
+          <div className="mt-1 text-xs text-slate-700">Select a task from the list to view its progress</div>
+        </div>
       </div>
     );
   }
 
   if (isLoading && events.length === 0) {
     return (
-      <div className="h-full rounded-lg border border-slate-800 bg-slate-950 flex items-center justify-center text-sm text-slate-500">
+      <div className="flex h-full items-center justify-center bg-black text-sm text-slate-500">
         Loading progress...
       </div>
     );
@@ -51,7 +55,7 @@ export function TaskProgressGraph({ task }: Props) {
 
   if (events.length === 0) {
     return (
-      <div className="h-full rounded-lg border border-slate-800 bg-slate-950 flex items-center justify-center text-sm text-slate-600">
+      <div className="flex h-full items-center justify-center bg-black text-sm text-slate-600">
         No progress events yet
       </div>
     );
@@ -60,8 +64,8 @@ export function TaskProgressGraph({ task }: Props) {
   const rounds = groupByRound(events);
 
   return (
-    <div className="h-full rounded-lg border border-slate-800 bg-slate-950 overflow-hidden flex flex-col">
-      <div className="flex items-center justify-between border-b border-slate-800 px-4 py-3">
+    <div className="flex h-full flex-col overflow-hidden bg-black">
+      <div className="flex items-center justify-between border-b border-[#20262e] bg-[#090f15] px-5 py-3">
         <div className="min-w-0">
           <div className="text-sm font-semibold text-slate-100 truncate">{task.issueKey}</div>
           <div className="text-xs text-slate-500 truncate">{task.title}</div>
@@ -70,7 +74,7 @@ export function TaskProgressGraph({ task }: Props) {
           Round {task.round}/{task.maxRounds}
         </div>
       </div>
-      <div className="min-h-0 flex-1 overflow-auto p-4 space-y-5">
+      <div className="min-h-0 flex-1 space-y-5 overflow-auto p-5">
         {rounds.map(({ round, roundEvents }) => (
           <RoundLane key={round} round={round} events={roundEvents} />
         ))}
@@ -87,7 +91,7 @@ function RoundLane({ round, events }: { round: number; events: TaskProgressEvent
         <div className="text-xs font-semibold uppercase tracking-normal text-slate-400">
           {round === 0 ? 'Intake' : `Round ${round}`}
         </div>
-        <div className="h-px flex-1 bg-slate-800" />
+        <div className="h-px flex-1 bg-[#20262e]" />
       </div>
       <div className="overflow-x-auto">
         <div className="grid min-w-[900px] grid-cols-9 gap-2">
@@ -116,7 +120,7 @@ function PhaseNode({ event, label }: { event?: TaskProgressEvent; label: string 
   return (
     <div
       className={cn(
-        'h-24 rounded-md border px-2.5 py-2 flex flex-col justify-between transition-colors',
+        'flex h-24 flex-col justify-between rounded-md border px-2.5 py-2 transition-colors',
         STATUS_STYLES[status],
       )}
     >

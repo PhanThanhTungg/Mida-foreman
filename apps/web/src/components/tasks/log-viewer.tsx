@@ -1,6 +1,7 @@
 'use client';
 import '@xterm/xterm/css/xterm.css';
 import { useEffect, useRef, useState } from 'react';
+import { SquareTerminal } from 'lucide-react';
 import { io } from 'socket.io-client';
 import type { WsMessage } from '@foreman/types';
 import { WS_URL } from '@/lib/constants';
@@ -33,8 +34,8 @@ export function LogViewer({ taskId, initialLog }: Props) {
         fontSize: 13,
         lineHeight: 1.4,
         theme: {
-          background: '#0d1117',
-          foreground: '#c9d1d9',
+          background: '#000000',
+          foreground: '#d1d7e0',
           cursor: '#c9d1d9',
           black: '#484f58',
           red: '#ff7b72',
@@ -105,10 +106,14 @@ export function LogViewer({ taskId, initialLog }: Props) {
   }, [taskId]);
 
   return (
-    <div className="h-full w-full relative rounded-lg overflow-hidden">
+    <div className="relative h-full w-full overflow-hidden bg-black">
       {!taskId && (
-        <div className="absolute inset-0 flex items-center justify-center text-slate-600 text-sm z-10">
-          Select a task to view its log
+        <div className="absolute inset-0 z-10 flex items-center justify-center">
+          <div className="flex flex-col items-center text-center">
+            <SquareTerminal className="mb-4 size-9 text-slate-700" strokeWidth={1.75} />
+            <div className="text-sm font-medium text-slate-600">No task selected</div>
+            <div className="mt-1 text-xs text-slate-700">Select a task from the list to view its log</div>
+          </div>
         </div>
       )}
       <div

@@ -64,26 +64,28 @@ export function TasksClient({ initialTasks, initialWorkspaces }: Props) {
 
   return (
     <>
-      <div className="flex gap-4 h-[calc(100vh-80px)]">
-        <div className="w-96 flex-none flex flex-col gap-4 overflow-y-auto">
+      <div className="flex h-[calc(100vh-46px)] min-h-0 flex-col bg-black text-slate-100 lg:flex-row">
+        <aside className="flex min-h-0 flex-none flex-col overflow-hidden border-r border-[#20262e] bg-black lg:w-[322px]">
           <TaskForm workspaces={allWorkspaces} onCreated={mutate} />
-          <TaskList
-            tasks={allTasks}
-            selectedId={selectedId}
-            onSelect={setSelectedId}
-            onRetry={handleRetry}
-            retryingId={retryingId}
-            onDelete={setPendingDeleteId}
-            deletingId={deletingId}
-          />
-        </div>
-        <div className="flex-1 min-h-0">
+          <div className="scrollbar-foreman min-h-0 flex-1 overflow-auto">
+            <TaskList
+              tasks={allTasks}
+              selectedId={selectedId}
+              onSelect={setSelectedId}
+              onRetry={handleRetry}
+              retryingId={retryingId}
+              onDelete={setPendingDeleteId}
+              deletingId={deletingId}
+            />
+          </div>
+        </aside>
+        <section className="min-h-0 flex-1 bg-black">
           <TaskDetailTabs task={selectedTask ?? null} />
-        </div>
+        </section>
       </div>
 
       <AlertDialog open={!!pendingDeleteId} onOpenChange={(open) => { if (!open) setPendingDeleteId(null); }}>
-        <AlertDialogContent className="bg-slate-900 border-slate-700">
+        <AlertDialogContent className="border-[#27313d] bg-[#090d12]">
           <AlertDialogHeader>
             <AlertDialogTitle className="text-slate-100">Delete task?</AlertDialogTitle>
             <AlertDialogDescription className="text-slate-400">
@@ -93,12 +95,12 @@ export function TasksClient({ initialTasks, initialWorkspaces }: Props) {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel className="border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700">
+            <AlertDialogCancel className="border-[#27313d] bg-[#0d131a] text-slate-300 hover:bg-[#141c26]">
               Cancel
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDeleteConfirm}
-              className="bg-red-700 hover:bg-red-600 text-white"
+              className="bg-red-700 text-white hover:bg-red-600"
             >
               Delete
             </AlertDialogAction>
