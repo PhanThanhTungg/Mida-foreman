@@ -27,11 +27,12 @@ CMD ["pnpm", "--filter", "@foreman/api", "dev"]
 
 # ── production: minimal runtime image ───────────────────────────────────────
 FROM node:20-alpine AS production
-RUN npm install -g pnpm@9
+RUN apk add --no-cache openssl && npm install -g pnpm@9
 WORKDIR /app
 ENV NODE_ENV=production
 
 COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/apps/api/node_modules ./apps/api/node_modules
 COPY --from=build /app/apps/api/dist ./apps/api/dist
 COPY --from=build /app/apps/api/prisma ./apps/api/prisma
 COPY --from=build /app/apps/api/package.json ./apps/api/

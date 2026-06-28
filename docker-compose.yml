@@ -8,7 +8,7 @@ services:
       POSTGRES_USER: foreman
       POSTGRES_PASSWORD: foreman
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -20,7 +20,7 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - "6379:6379"
+      - "6380:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -45,7 +45,7 @@ services:
     volumes:
       - "${REPOS_BASE_PATH:-/repos}:${REPOS_BASE_PATH:-/repos}"
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:3001/health || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3001/api/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -55,7 +55,13 @@ services:
       context: .
       dockerfile: apps/web/Dockerfile
       target: production
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:3001
+        NEXT_PUBLIC_WS_URL: http://localhost:3001
+        NEXT_PUBLIC_API_KEY: ${API_KEY}
     env_file: .env
+    environment:
+      PORT: "3000"
     ports:
       - "3000:3000"
     depends_on:
