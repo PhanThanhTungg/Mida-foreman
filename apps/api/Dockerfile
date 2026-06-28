@@ -1,6 +1,6 @@
 # foreman/apps/api/Dockerfile
 FROM node:20-alpine AS base
-RUN npm install -g pnpm@9
+RUN npm install -g pnpm@9 @anthropic-ai/claude-code
 WORKDIR /app
 
 # ── deps: install all workspace dependencies ────────────────────────────────
@@ -27,7 +27,7 @@ CMD ["pnpm", "--filter", "@foreman/api", "dev"]
 
 # ── production: minimal runtime image ───────────────────────────────────────
 FROM node:20-alpine AS production
-RUN apk add --no-cache openssl && npm install -g pnpm@9
+RUN apk add --no-cache openssl && npm install -g pnpm@9 @anthropic-ai/claude-code
 WORKDIR /app
 ENV NODE_ENV=production
 

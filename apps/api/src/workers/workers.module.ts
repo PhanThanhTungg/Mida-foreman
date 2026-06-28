@@ -3,7 +3,6 @@ import { BullModule } from '@nestjs/bull';
 import Redis from 'ioredis';
 import { TaskProcessor } from './task.processor';
 import { ClaudeRunnerService } from './claude-runner.service';
-import { ToolExecutorService } from './tool-executor.service';
 import { RepoLockService } from './repo-lock.service';
 import { SuccessObserverService } from './success-observer.service';
 import { ReposModule } from '../repos/repos.module';
@@ -26,7 +25,6 @@ import { GatewayModule } from '../gateway/gateway.module';
     },
     TaskProcessor,
     ClaudeRunnerService,
-    ToolExecutorService,
     RepoLockService,
     SuccessObserverService,
   ],

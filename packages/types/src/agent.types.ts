@@ -13,8 +13,6 @@ export type SuccessCondition = 'mr_created' | 'ci_passed' | 'no_build_errors';
 export interface AgentConfig {
   type: AgentType;
   systemPrompt: string;
-  allowedTools: ToolName[];
-  maxIterations: number;
   successConditions: SuccessCondition[];
 }
 
@@ -28,6 +26,7 @@ export interface AgentRunResult {
 export interface RoundContext {
   taskId: string;
   repoPath: string;
+  githubRepo: string;
   issueKey: string;
   title: string;
   round: number;

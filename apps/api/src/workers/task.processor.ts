@@ -57,6 +57,7 @@ export class TaskProcessor {
         {
           taskId,
           repoPath: repo.path,
+          githubRepo: repo.githubRepo,
           issueKey: task.issueKey,
           title: task.title,
           round: nextRound,

@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev -p 3000",
-    "build": "next build",
-    "start": "next start",
+    "dev": "node scripts/load-env-and-run.js next dev -p 3000",
+    "build": "node scripts/load-env-and-run.js next build",
+    "start": "node scripts/load-env-and-run.js next start",
     "lint": "next lint"
   },
   "dependencies": {

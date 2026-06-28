@@ -4,15 +4,14 @@
   "private": true,
   "scripts": {
     "build": "nest build",
-    "dev": "nest start --watch",
-    "start": "node dist/main",
+    "dev": "node scripts/load-env-and-run.js nest start --watch",
+    "start": "node dist/apps/api/src/main",
     "test": "jest --passWithNoTests",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "lint": "eslint \"{src,test}/**/*.ts\""
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.24.3",
     "@foreman/types": "workspace:*",
     "@nestjs/bull": "^10.1.1",
     "@nestjs/common": "^10.3.0",
