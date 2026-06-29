@@ -7,3 +7,7 @@ coverage/
 .turbo/
 *.tsbuildinfo
 pnpm-lock.yaml.bak
+.mcp.json
+CLAUDE.md
+.claude
+.codegraph
