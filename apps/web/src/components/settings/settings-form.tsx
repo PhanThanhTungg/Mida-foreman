@@ -205,6 +205,7 @@ export function SettingsForm({ initialSettings }: { initialSettings: Setting[] }
                   <div className="divide-y divide-[#111820]">
                     {fields.map((field) => {
                       const Icon = field.icon;
+                      const hasMaskedValue = initialSettings.some((s) => s.key === field.key && s.value === '***');
                       const configured = isConfigured(field.key);
                       return (
                         <div key={field.key} className="grid gap-3 px-4 py-4 sm:grid-cols-[220px_minmax(0,1fr)] sm:px-5">
@@ -226,7 +227,7 @@ export function SettingsForm({ initialSettings }: { initialSettings: Setting[] }
                                 type={field.type}
                                 value={values[field.key] ?? ''}
                                 onChange={(e) => setValues((v) => ({ ...v, [field.key]: e.target.value }))}
-                                placeholder={field.placeholder}
+                                placeholder={hasMaskedValue ? '***********' : field.placeholder}
                                 className={inputClass}
                               />
                               <span
